@@ -16,7 +16,7 @@ np.random.seed(0)
 # VIGOR
 
 class VIGORDataset(Dataset):
-    def __init__(self, root, label_root = 'splits_new', split='samearea', train=True, transform=None, pos_only=True, ori_noise=180, random_orientation=None):
+    def __init__(self, root, label_root = 'splits__corrected', split='samearea', train=True, transform=None, pos_only=True, ori_noise=180, random_orientation=None):
         self.root = root
         self.label_root = label_root
         self.split = split
@@ -64,11 +64,11 @@ class VIGORDataset(Dataset):
             # load grd panorama list
             if self.split == 'samearea':
                 if self.train:
-                    label_fname = os.path.join(self.root, self.label_root, city, 'same_area_balanced_train.txt')
+                    label_fname = os.path.join(self.root, self.label_root, city, 'same_area_balanced_train__corrected.txt')
                 else:
-                    label_fname = os.path.join(self.root, label_root, city, 'same_area_balanced_test.txt')
+                    label_fname = os.path.join(self.root, label_root, city, 'same_area_balanced_test__corrected.txt')
             elif self.split == 'crossarea':
-                label_fname = os.path.join(self.root, self.label_root, city, 'pano_label_balanced.txt')
+                label_fname = os.path.join(self.root, self.label_root, city, 'pano_label_balanced__corrected.txt')
                 
             with open(label_fname, 'r') as file:
                 for line in file.readlines():
