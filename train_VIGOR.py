@@ -32,6 +32,7 @@ parser.add_argument('--weight_ori', type=float, help='weight on orientation loss
 parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss', default=1e4)
 parser.add_argument('-f', '--FoV', type=int, help='field of view', default=360)
 parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation', default=180.)
+parser.add_argument('--backbone', type=str, help='feature extractor name', default='dinov2')
 dataset_root='/data/dataset/VIGOR'
 
 args = vars(parser.parse_args())
@@ -46,7 +47,8 @@ FoV = args['FoV']
 pos_only = args['pos_only']
 label = area + '_HFoV' + str(FoV)
 ori_noise = args['ori_noise']
-ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
+ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior
+backbone = args['backbone']
 
 
 if FoV == 360:
@@ -97,7 +99,7 @@ else:
 
 if training:
     torch.cuda.empty_cache()
-    CVM_model = CVM(device, circular_padding)
+    CVM_model = CVM(device, circular_padding, backbone)
     CVM_model.to(device)
     for param in CVM_model.parameters():
         param.requires_grad = True

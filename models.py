@@ -46,12 +46,13 @@ def double_conv(in_channels, out_channels):
     )
 
 class CVM_VIGOR(nn.Module):
-    def __init__(self, device, circular_padding):
+    def __init__(self, device, circular_padding, backbone):
         super(CVM_VIGOR, self).__init__()
         self.device = device
         self.circular_padding = circular_padding
-        
+
         self.grd_efficientnet = EfficientNet.from_pretrained('efficientnet-b0', self.circular_padding)
+        self.sat_efficientnet = EfficientNet.from_pretrained('efficientnet-b0', circular=False)
 
         self.grd_feature_to_descriptor1 = nn.Sequential(
                                     nn.Conv2d(1280, 64, 1),
@@ -94,8 +95,7 @@ class CVM_VIGOR(nn.Module):
                                     nn.Conv2d(10, 1, 1),
                                     nn.Flatten(start_dim=1)
                                     )
-        
-        self.sat_efficientnet = EfficientNet.from_pretrained('efficientnet-b0', circular=False)
+
         
         
         self.sat_feature_to_descriptors = nn.Sequential(nn.Flatten(start_dim=1),
@@ -148,6 +148,8 @@ class CVM_VIGOR(nn.Module):
         
     def forward(self, grd, sat):
         grd_feature_volume = self.grd_efficientnet.extract_features(grd) # shape=[8, 1280, 10, 20] 1280 是64*20
+        sat_feature_volume, multiscale_sat = self.sat_efficientnet.extract_features_multiscale(sat)
+
         grd_descriptor1 = self.grd_feature_to_descriptor1(grd_feature_volume) # length 1280 shape=[8, 1280]
         grd_descriptor2 = self.grd_feature_to_descriptor2(grd_feature_volume) # length 640 shape=[8, 640]
         grd_descriptor3 = self.grd_feature_to_descriptor3(grd_feature_volume) # length 320
@@ -162,7 +164,7 @@ class CVM_VIGOR(nn.Module):
         grd_descriptor_map5 = grd_descriptor5.unsqueeze(2).unsqueeze(3).repeat(1, 1, 128, 128)
         grd_descriptor_map6 = grd_descriptor6.unsqueeze(2).unsqueeze(3).repeat(1, 1, 256, 256)
       
-        sat_feature_volume, multiscale_sat = self.sat_efficientnet.extract_features_multiscale(sat)
+
         # len(multiscale_sat)=16, sat_feature_volume.shape = [8, 1280, 16, 16]
         sat_feature_block0 = multiscale_sat[0] # [16, 256, 256]
         sat_feature_block2 = multiscale_sat[2] #[24, 128, 128]
@@ -317,9 +319,9 @@ class CVM_VIGOR(nn.Module):
             else:
                 matching_score_stacked6 = torch.cat([matching_score_stacked6, matching_score], dim=1)
         matching_score_max, _ = torch.max(matching_score_stacked6, dim=1, keepdim=True)
-        x = torch.cat([matching_score_max, self.sat_normalization(x)], dim=1)
-        x = self.deconv1(x)
-        x = self.conv1(x)
+        x = torch.cat([matching_score_max, self.sat_normalization(x)], dim=1) # [8, 41, 256, 256]
+        x = self.deconv1(x) # [8, 16, 512, 512]
+        x = self.conv1(x) #[8, 1, 512, 512]
         
         logits_flattened = torch.flatten(x, start_dim=1)
         heatmap = torch.reshape(nn.Softmax(dim=-1)(logits_flattened), x.size())
