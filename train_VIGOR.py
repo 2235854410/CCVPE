@@ -16,6 +16,7 @@ from datasets import VIGORDataset
 from losses import infoNCELoss, cross_entropy_loss, orientation_loss
 from models import CVM_VIGOR as CVM
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
+import wandb
 
 torch.manual_seed(17)
 np.random.seed(0)
@@ -23,7 +24,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 "The device is: {}".format(device)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--area', type=str, help='samearea or crossarea', default='samearea')
+parser.add_argument('--area', type=str, help='samearea or crossarea', default='crossarea')
+parser.add_argument('--name', type=str, help='experiment description', default='vanilla CCVPE in cross area')
 parser.add_argument('--training', choices=('True','False'), default='True')
 parser.add_argument('--pos_only', choices=('True','False'), default='True')
 parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-4)
@@ -47,6 +49,8 @@ pos_only = args['pos_only']
 label = area + '_HFoV' + str(FoV)
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
+print(args)
+wandb.init(project="CCVPE-vanilla", name=args['name'], config=args)
 
 
 if FoV == 360:
@@ -107,6 +111,7 @@ if training:
 
     global_step = 0
     # with torch.autograd.set_detect_anomaly(True):
+    wandb.watch(CVM_model, log="all", log_freq=100)
 
     for epoch in range(15):  # loop over the dataset multiple times
         running_loss = 0.0
@@ -124,7 +129,7 @@ if training:
 
             gt_bottleneck = nn.MaxPool2d(64, stride=64)(gt_with_ori)
             nonzero_elements = gt_bottleneck[gt_bottleneck != 0]
-            print(nonzero_elements)
+            # print(nonzero_elements)
             gt_bottleneck2 = nn.MaxPool2d(32, stride=32)(gt_with_ori)
             gt_bottleneck3 = nn.MaxPool2d(16, stride=16)(gt_with_ori)
             gt_bottleneck4 = nn.MaxPool2d(8, stride=8)(gt_with_ori)
@@ -148,6 +153,10 @@ if training:
             loss_ce =  cross_entropy_loss(logits_flattened, gt_flattened)
 
             loss = loss_ce + weight_infoNCE*(loss_infoNCE+loss_infoNCE2+loss_infoNCE3+loss_infoNCE4+loss_infoNCE5+loss_infoNCE6)/6 + weight_ori*loss_ori
+            if i% 100 ==0:
+                wandb.log({'loss_infoNCE1': loss_infoNCE, "loss_infoNCE2": loss_infoNCE2,"loss_infoNCE3": loss_infoNCE3 \
+                          , "loss_infoNCE4": loss_infoNCE4, "loss_infoNCE5": loss_infoNCE5,"loss_infoNCE6": loss_infoNCE6, "total loss": loss})
+
 
            
             loss.backward()
