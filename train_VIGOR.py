@@ -33,7 +33,7 @@ parser.add_argument('-b', '--batch_size', type=int, help='batch size', default=8
 parser.add_argument('--weight_ori', type=float, help='weight on orientation loss', default=1e1)
 parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss', default=1e4)
 parser.add_argument('-f', '--FoV', type=int, help='field of view', default=360)
-parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation', default=180.)
+parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation', default=0)
 dataset_root='/data/dataset/VIGOR'
 
 args = vars(parser.parse_args())
@@ -50,7 +50,7 @@ label = area + '_HFoV' + str(FoV)
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 print(args)
-wandb.init(project="CCVPE-vanilla", name=args['name'], config=args)
+wandb.init(project="CCVPE-sampling", name=args['name'], config=args)
 
 
 if FoV == 360:
@@ -154,8 +154,8 @@ if training:
 
             loss = loss_ce + weight_infoNCE*(loss_infoNCE+loss_infoNCE2+loss_infoNCE3+loss_infoNCE4+loss_infoNCE5+loss_infoNCE6)/6 + weight_ori*loss_ori
             if i% 100 ==0:
-                wandb.log({'loss_infoNCE1': loss_infoNCE, "loss_infoNCE2": loss_infoNCE2,"loss_infoNCE3": loss_infoNCE3 \
-                          , "loss_infoNCE4": loss_infoNCE4, "loss_infoNCE5": loss_infoNCE5,"loss_infoNCE6": loss_infoNCE6, "total loss": loss})
+                wandb.log({'contrastive_loss1': loss_infoNCE, "contrastive_loss2": loss_infoNCE2,"contrastive_loss3": loss_infoNCE3 \
+                          , "contrastive_loss4": loss_infoNCE4, "contrastive_loss5": loss_infoNCE5,"contrastive_loss6": loss_infoNCE6, "total loss": loss})
 
 
            
