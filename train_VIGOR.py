@@ -96,8 +96,8 @@ if training is True:
     val_indices = index_list[int(len(index_list)*0.8):]
     training_set = Subset(vigor, train_indices)
     val_set = Subset(vigor, val_indices)
-    train_dataloader = DataLoader(training_set, batch_size=batch_size, shuffle=True)
-    val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
+    train_dataloader = DataLoader(training_set, batch_size=batch_size, shuffle=True, num_workers=12)
+    val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=12)
 else:
     test_dataloader = DataLoader(vigor, batch_size=batch_size, shuffle=False)
 
