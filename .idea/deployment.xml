@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="test@10.19.138.58:22 password (4)" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" autoUpload="Always" serverName="test@10.19.138.58:22 password (3)" remoteFilesAllowedToDisappearOnAutoupload="false" confirmBeforeUploading="false">
+    <option name="confirmBeforeUploading" value="false" />
     <serverData>
       <paths name="test@10.19.138.58:22 password">
         <serverdata>
@@ -19,14 +20,7 @@
       <paths name="test@10.19.138.58:22 password (3)">
         <serverdata>
           <mappings>
-            <mapping deploy="/tmp/pycharm_project_899" local="$PROJECT_DIR$" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="test@10.19.138.58:22 password (4)">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/test/code" local="$PROJECT_DIR$" />
+            <mapping deploy="/home/test/code/CCVPE/" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
