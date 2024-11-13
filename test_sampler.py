@@ -34,11 +34,17 @@ def unnormalize(img, mean, std):
     return img
 mean = [0.485, 0.456, 0.406]
 std = [0.229, 0.224, 0.225]
-GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_cross.pkl"
+area = "crossarea"
+if area == 'crossarea':
+    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_cross_debug.pkl"
+else:
+    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_same_debug.pkl"
+
+
 with open(GPS_DICT_PATH, "rb") as f:
     sim_dict = pickle.load(f)
 
-vigor = VIGORDataset(dataset_root, split="crossarea", train=True, pos_only=True,
+vigor = VIGORDataset(dataset_root, split=area, train=True, pos_only=True,
                      transform=(transform_grd, transform_sat), ori_noise=0,
                      random_orientation=None)
 

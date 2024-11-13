@@ -2,7 +2,8 @@ import numpy as np
 import torch
 from sklearn.metrics import DistanceMetric
 import pickle
-from vigor import VigorDatasetTrain
+# from vigor import VigorDatasetTrain
+from datasets_with_sampling import VIGORDataset
 from util import geodistance
 
 TOP_K = 64
@@ -14,10 +15,14 @@ BATCH_SIZE = 20
 
 SAME_AREA = False
 
-dataset = VigorDatasetTrain(data_folder="/data/dataset/VIGOR",
-                            same_area=SAME_AREA)
+batch_size = 4
+dataset_root = '/data/dataset/VIGOR'
 
-df_sat = dataset.df_sat
+dataset = VIGORDataset(dataset_root, split="crossarea", train=True, pos_only=True,
+                     transform=None, ori_noise=0,
+                     random_orientation=None)
+
+# df_sat = dataset.df_sat
 df_ground = dataset.df_ground
 print(f"length of df_ground : {len(df_ground)}")
 
@@ -75,7 +80,7 @@ for i, idx in enumerate(train_sat_ids):
     #     print(f"lat: {lat}, long: {long}")
 
 print("Saving...")
-with open("dataset/vigor_gps_dict_cross.pkl", "wb") as f:
+with open("dataset/vigor_gps_dict_cross_debug.pkl", "wb") as f:
     pickle.dump(near_neighbors, f)
 
 # -----------------------------------------------------------------------------#
@@ -84,10 +89,12 @@ with open("dataset/vigor_gps_dict_cross.pkl", "wb") as f:
 
 SAME_AREA = True
 
-dataset = VigorDatasetTrain(data_folder="/data/dataset/VIGOR",
-                            same_area=SAME_AREA)
+dataset = VIGORDataset(dataset_root, split="samearea", train=True, pos_only=True,
+                     transform=None, ori_noise=0,
+                     random_orientation=None)
 
-df_sat = dataset.df_sat
+
+# df_sat = dataset.df_sat
 df_ground = dataset.df_ground
 print(f"length of df_ground : {len(df_ground)}")
 
@@ -145,5 +152,5 @@ for i, idx in enumerate(train_sat_ids):
     # print(f"lat_main: {lat_main}, long_main: {long_main}")
 
 print("Saving...")
-with open("dataset/vigor_gps_dict_same.pkl", "wb") as f:
+with open("dataset/vigor_gps_dict_same_debug.pkl", "wb") as f:
     pickle.dump(near_neighbors, f)

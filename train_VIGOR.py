@@ -11,7 +11,7 @@ from util import print_colored
 # os.environ["MKL_NUM_THREADS"] = "4"
 # os.environ["NUMEXPR_NUM_THREADS"] = "4"
 # os.environ["OMP_NUM_THREADS"] = "4"
-os.environ['CUDA_VISIBLE_DEVICES'] = "3"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 import argparse
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
@@ -19,8 +19,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
-from datasets import VIGORDataset
-# from datasets_with_sampling import VIGORDataset
+# from datasets import VIGORDataset
+from datasets_with_sampling import VIGORDataset
 from losses import infoNCELoss, cross_entropy_loss, orientation_loss, contrastive_loss
 from models import CVM_VIGOR as CVM
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
@@ -32,9 +32,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 "The device is: {}".format(device)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--area', type=str, help='samearea or crossarea', default='crossarea')
-parser.add_argument('--name', type=str, help='experiment description', default='gps_based-infer')
-parser.add_argument('--training', choices=('True', 'False'), default='False')
+parser.add_argument('--area', type=str, help='samearea or crossarea', default='samearea')
+parser.add_argument('--name', type=str, help='experiment description', default='gps_based-samearea')
+parser.add_argument('--training', choices=('True', 'False'), default='True')
 parser.add_argument('--gps_sampling', choices=('True', 'False'), default='True')
 parser.add_argument('--pos_only', choices=('True', 'False'), default='True')
 parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-4)
@@ -60,9 +60,9 @@ label = area + '_HFoV' + str(FoV)
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18)  # round the closest multiple of 18 degrees within prior
 if area == 'crossarea':
-    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_cross.pkl"
+    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_cross_debug.pkl"
 else:
-    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_same.pkl"
+    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_same_debug.pkl"
 
 wandb.init(project="CCVPE-sampling", name=args['name'], config=args)
 print(args)

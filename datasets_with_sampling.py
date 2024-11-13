@@ -104,21 +104,26 @@ class VIGORDataset(Dataset):
         self.delta = np.array(self.delta)
 
         # load sat list
-        sat_list = []
-        for city in self.city_list:
-            df_tmp = pd.read_csv(f'{self.root}/splits/{city}/satellite_list.txt', header=None, delim_whitespace=True)
-            df_tmp = df_tmp.rename(columns={0: "sat"})
-            df_tmp["path"] = df_tmp.apply(lambda x: f'{self.root}/{city}/satellite/{x.sat}', axis=1)
-            sat_list.append(df_tmp)
-        self.df_sat = pd.concat(sat_list, axis=0).reset_index(drop=True)
-
-        # idx for complete train and test independent of mode = train or test
-        sat2idx = dict(zip(self.df_sat.sat, self.df_sat.index))
-        self.idx2sat = dict(zip(self.df_sat.index, self.df_sat.sat))
-        self.idx2sat_path = dict(zip(self.df_sat.index, self.df_sat.path))
+        # sat_list = []
+        # for city in self.city_list:
+        #     df_tmp = pd.read_csv(f'{self.root}/splits/{city}/satellite_list.txt', header=None, delim_whitespace=True)
+        #     df_tmp = df_tmp.rename(columns={0: "sat"})
+        #     df_tmp["path"] = df_tmp.apply(lambda x: f'{self.root}/{city}/satellite/{x.sat}', axis=1)
+        #     sat_list.append(df_tmp)
+        # self.df_sat = pd.concat(sat_list, axis=0).reset_index(drop=True)
+        #
+        # # idx for complete train and test independent of mode = train or test
+        # sat2idx = dict(zip(self.df_sat.sat, self.df_sat.index))
+        # self.idx2sat = dict(zip(self.df_sat.index, self.df_sat.sat))
+        # self.idx2sat_path = dict(zip(self.df_sat.index, self.df_sat.path))
 
         # ground dependent on mode 'train' or 'test'
         ground_list = []
+        self.delta = []
+        sat_idx_counter = 0
+        idx2sat_dict = {}
+        idx2sat_path_dict = {}
+        sat2idx_dict = {}
         for city in self.city_list:
 
             if self.split == 'samearea':
@@ -140,10 +145,27 @@ class VIGORDataset(Dataset):
             df_tmp["path_sat"] = df_tmp.apply(lambda x: f'{self.root}/{city}/satellite/{x.sat}', axis=1)
             df_tmp["delta"] = df_tmp.apply(lambda x: [x.delta_x, x.delta_y], axis=1)
 
-            for sat_n in ["sat", "sat_np1", "sat_np2", "sat_np3"]:
-                df_tmp[f'{sat_n}'] = df_tmp[f'{sat_n}'].map(sat2idx)
+            if sat_idx_counter == 0:
+                idx2sat_dict.update(dict(zip(df_tmp.index, df_tmp['sat'])))
+                idx2sat_path_dict.update(dict(zip(df_tmp.index, df_tmp["path_sat"])))
+            else:
+                idx2sat_dict.update(dict(zip(df_tmp.index + sat_idx_counter, df_tmp['sat'])))
+                idx2sat_path_dict.update(dict(zip(df_tmp.index + sat_idx_counter, df_tmp["path_sat"])))
+            sat_idx_counter += len(df_tmp)
+
+            sat2idx_dict.update({v: k for k, v in idx2sat_dict.items()})
+
+            # for sat_n in ["sat", "sat_np1", "sat_np2", "sat_np3"]:
+            #     # replace image name by idx, so the df_tmp["sat"] value is the sat's idx in idx2sat
+            #     df_tmp[f'{sat_n}'] = df_tmp[f'{sat_n}'].map(sat2idx)
+            df_tmp["sat"] = df_tmp["sat"].map(sat2idx_dict)
 
             ground_list.append(df_tmp)
+
+        self.idx2sat = idx2sat_dict
+        self.idx2sat_path = idx2sat_path_dict
+        self.sat2idx = sat2idx_dict
+
         self.df_ground = pd.concat(ground_list, axis=0).reset_index(drop=True)
         print(f"df_ground.len = {len(self.df_ground)}")
 
@@ -153,7 +175,6 @@ class VIGORDataset(Dataset):
 
         self.pairs = list(zip(self.df_ground.index, self.df_ground.sat))
         self.idx2pairs = defaultdict(list)
-        print(f"pairs.len: {len(self.pairs)}")
 
         self.idx2delta = dict(zip(self.df_ground.index, self.df_ground.delta))
 
@@ -161,7 +182,7 @@ class VIGORDataset(Dataset):
         for pair in self.pairs:
             self.idx2pairs[pair[1]].append(pair)
 
-        self.label = self.df_ground[["sat", "sat_np1", "sat_np2", "sat_np3"]].values
+        # self.label = self.df_ground[["sat", "sat_np1", "sat_np2", "sat_np3"]].values
 
         self.samples = copy.deepcopy(self.pairs)
 
@@ -253,8 +274,10 @@ class VIGORDataset(Dataset):
         elif 'Chicago' in self.idx2ground_path[idx_ground]:
             city = 'Chicago'
 
-        # return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle, row_offset, col_offset, sat_path, grd_path
-        return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
+        return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle, row_offset, col_offset, sat_path, grd_path
+        # return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
+
+
     def shuffle(self, sim_dict=None, neighbour_select=4, neighbour_range=16):
 
         '''

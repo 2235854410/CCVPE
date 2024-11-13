@@ -44,7 +44,7 @@ def contrastive_loss(score_map, labels, temperature=0.1):
     # prob_pos = (exp_scores.diagonal(dim1=0, dim2=1) / denom.squeeze(-1))  # (B, H*W)
     exp_pos_samples = exp_scores[torch.arange(B), torch.arange(B)] #[4, 64]
     denom_pos = torch.sum(exp_pos_samples, dim=1, keepdim=True)
-    prob_pos = (exp_pos_samples / denom_pos)  # (B, H*W)
+    prob_pos = (exp_pos_samples / denom)  # (B, H*W)
 
     # 对正样本概率取对数，并计算带权重的损失
     log_prob_pos = torch.log(prob_pos + 1e-10)  # 加一个小数防止 log(0)
