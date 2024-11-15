@@ -39,7 +39,7 @@ class VigorDatasetTrain(Dataset):
         # load sat list 
         sat_list = []
         for city in self.cities:
-            df_tmp = pd.read_csv(f'{data_folder}/splits/{city}/satellite_list.txt', header=None, delim_whitespace=True)
+            df_tmp = pd.read_csv(f'{data_folder}/splits__corrected/{city}/satellite_list.txt', header=None, delim_whitespace=True)
             df_tmp = df_tmp.rename(columns={0: "sat"})
             df_tmp["path"] = df_tmp.apply(lambda x: f'{data_folder}/satellite/{city}/{x.sat}', axis=1)
             sat_list.append(df_tmp)

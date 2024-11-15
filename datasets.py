@@ -16,7 +16,7 @@ np.random.seed(0)
 # VIGOR
 
 class VIGORDataset(Dataset):
-    def __init__(self, root, label_root = 'splits__corrected', split='samearea', train=True, transform=None, pos_only=True, ori_noise=180, random_orientation=None):
+    def __init__(self, root, label_root = 'splits__corrected', split='samearea', train=True, transform=None, pos_only=True, ori_noise=180, random_orientation=None, test=False):
         self.root = root
         self.label_root = label_root
         self.split = split
@@ -24,6 +24,7 @@ class VIGORDataset(Dataset):
         self.pos_only = pos_only
         self.ori_noise = ori_noise
         self.random_orientation = random_orientation
+        self.test = test
         
         if transform != None:
             self.grdimage_transform = transform[0]
@@ -176,8 +177,10 @@ class VIGORDataset(Dataset):
         elif 'Chicago' in self.grd_list[idx]:
             city = 'Chicago'
             
-        # return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle, row_offset, col_offset, sat_path, grd_path
-        return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
+        if self.test:
+            return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle, row_offset, col_offset, sat_path, grd_path
+        else:
+            return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
 
 
 # ---------------------------------------------------------------------------------

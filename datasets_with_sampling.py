@@ -25,7 +25,7 @@ np.random.seed(0)
 
 class VIGORDataset(Dataset):
     def __init__(self, root, label_root='splits__corrected', split='samearea', train=True, transform=None,
-                 pos_only=True, ori_noise=180, random_orientation=None, batch_size=8):
+                 pos_only=True, ori_noise=180, random_orientation=None, batch_size=8, test=False):
         self.root = root
         self.label_root = label_root
         self.split = split
@@ -34,6 +34,7 @@ class VIGORDataset(Dataset):
         self.ori_noise = ori_noise
         self.random_orientation = random_orientation
         self.shuffle_batch_size = batch_size
+        self.test=test
 
         if transform != None:
             self.grdimage_transform = transform[0]
@@ -111,8 +112,8 @@ class VIGORDataset(Dataset):
         #     df_tmp["path"] = df_tmp.apply(lambda x: f'{self.root}/{city}/satellite/{x.sat}', axis=1)
         #     sat_list.append(df_tmp)
         # self.df_sat = pd.concat(sat_list, axis=0).reset_index(drop=True)
-        #
-        # # idx for complete train and test independent of mode = train or test
+
+        # idx for complete train and test independent of mode = train or test
         # sat2idx = dict(zip(self.df_sat.sat, self.df_sat.index))
         # self.idx2sat = dict(zip(self.df_sat.index, self.df_sat.sat))
         # self.idx2sat_path = dict(zip(self.df_sat.index, self.df_sat.path))
@@ -127,8 +128,13 @@ class VIGORDataset(Dataset):
         for city in self.city_list:
 
             if self.split == 'samearea':
-                df_tmp = pd.read_csv(f'{self.root}/splits__corrected/{city}/same_area_balanced_train__corrected.txt', header=None,
+                if self.train:
+                    df_tmp = pd.read_csv(f'{self.root}/splits__corrected/{city}/same_area_balanced_train__corrected.txt', header=None,
                                      delim_whitespace=True)
+                else:
+                    df_tmp = pd.read_csv(
+                        f'{self.root}/splits__corrected/{city}/same_area_balanced_test__corrected.txt', header=None,
+                        delim_whitespace=True)
             else:
                 df_tmp = pd.read_csv(f'{self.root}/splits__corrected/{city}/pano_label_balanced__corrected.txt', header=None,
                                      delim_whitespace=True)
@@ -185,6 +191,7 @@ class VIGORDataset(Dataset):
         # self.label = self.df_ground[["sat", "sat_np1", "sat_np2", "sat_np3"]].values
 
         self.samples = copy.deepcopy(self.pairs)
+        print(f"total samples = {len(self.samples)}")
 
     def __len__(self):
         return self.data_size
@@ -274,15 +281,17 @@ class VIGORDataset(Dataset):
         elif 'Chicago' in self.idx2ground_path[idx_ground]:
             city = 'Chicago'
 
-        return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle, row_offset, col_offset, sat_path, grd_path
-        # return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
+        if self.test:
+            return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle, row_offset, col_offset, sat_path, grd_path
+        else:
+            return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
 
 
-    def shuffle(self, sim_dict=None, neighbour_select=4, neighbour_range=16):
+    def shuffle(self, sim_dict=None, neighbour_select=4, neighbour_range=8):
 
         '''
         custom shuffle function for unique class_id sampling in batch
-        actually neighbour_select=64, neighbour_range=128, batch_size=128
+        neighbor_Select equals to batch_size
         '''
 
         print("\nShuffle Dataset:")

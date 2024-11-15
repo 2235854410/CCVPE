@@ -1,7 +1,7 @@
 import os
 import time
 
-import wandb
+
 
 
 from util import print_colored
@@ -11,6 +11,7 @@ from util import print_colored
 # os.environ["MKL_NUM_THREADS"] = "4"
 # os.environ["NUMEXPR_NUM_THREADS"] = "4"
 # os.environ["OMP_NUM_THREADS"] = "4"
+
 os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 import argparse
 from torch.utils.data import DataLoader, Subset
@@ -25,6 +26,8 @@ from losses import infoNCELoss, cross_entropy_loss, orientation_loss, contrastiv
 from models import CVM_VIGOR as CVM
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
 import pickle
+import wandb
+
 
 torch.manual_seed(17)
 np.random.seed(0)
@@ -33,7 +36,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--area', type=str, help='samearea or crossarea', default='samearea')
-parser.add_argument('--name', type=str, help='experiment description', default='gps_based-samearea')
+parser.add_argument('--name', type=str, help='experiment description', default='gps_based_same_crorrected_simdict')
 parser.add_argument('--training', choices=('True', 'False'), default='True')
 parser.add_argument('--gps_sampling', choices=('True', 'False'), default='True')
 parser.add_argument('--pos_only', choices=('True', 'False'), default='True')
@@ -60,9 +63,10 @@ label = area + '_HFoV' + str(FoV)
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18)  # round the closest multiple of 18 degrees within prior
 if area == 'crossarea':
-    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_cross_debug.pkl"
+    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_cross_debug4.pkl"
 else:
-    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_same_debug.pkl"
+    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_same_debug4.pkl"
+args['gps_dict_path'] = GPS_DICT_PATH
 
 wandb.init(project="CCVPE-sampling", name=args['name'], config=args)
 print(args)
@@ -107,8 +111,12 @@ vigor = VIGORDataset(dataset_root, split=area, train=training, pos_only=pos_only
                      random_orientation=random_orientation)
 
 if training is True:
-    dataset_length = int(vigor.__len__())
+    # dataset_length = int(vigor.__len__())-10
+
     index_list = np.arange(vigor.__len__())
+    if area == 'samearea':
+        # some samples maybe excluded when using gps based sampling strategy cause can not find enough neighbors for a batch
+        index_list -= 5
     # np.random.shuffle(index_list)
     train_indices = index_list[0: int(len(index_list) * 0.8)]
     val_indices = index_list[int(len(index_list) * 0.8):]
@@ -136,8 +144,8 @@ if training:
     for epoch in range(15):  # loop over the dataset multiple times
         running_loss = 0.0
         CVM_model.train()
-        # if args["gps_sampling"]:
-        #     vigor.shuffle(sim_dict)
+        if args["gps_sampling"]:
+            vigor.shuffle(sim_dict)
         for i, data in enumerate(train_dataloader, 0):
 
             # gt.shape[8, 1, 512, 512], gt_with_ori.shape[8, 20, 512, 512]
@@ -318,7 +326,7 @@ if training:
 else:
     torch.cuda.empty_cache()
     CVM_model = CVM_model = CVM(device, circular_padding)
-    test_model_path = '/home/test/code/CCVPE/models/VIGOR/crossarea_HFoV360/1/model_no-sampling-pos-only_2024-11-12 18:16:13.pt'
+    test_model_path = '/home/test/code/CCVPE/models/VIGOR/crossarea_HFoV360/7/model_gps_based-crossarea-reproduce_2024-11-13 15:54:27.pt'
     print('load model from: ' + test_model_path)
 
     CVM_model.load_state_dict(torch.load(test_model_path))
