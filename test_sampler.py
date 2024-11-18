@@ -38,9 +38,9 @@ mean = [0.485, 0.456, 0.406]
 std = [0.229, 0.224, 0.225]
 area = "samearea"
 if area == 'crossarea':
-    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_cross_debug4.pkl"
+    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_cross.pkl"
 else:
-    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_same_debug4.pkl"
+    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_same_nearst.pkl"
 
 
 with open(GPS_DICT_PATH, "rb") as f:

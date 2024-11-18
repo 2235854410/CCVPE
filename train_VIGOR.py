@@ -12,7 +12,7 @@ from util import print_colored
 # os.environ["NUMEXPR_NUM_THREADS"] = "4"
 # os.environ["OMP_NUM_THREADS"] = "4"
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "3"
 import argparse
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
@@ -36,9 +36,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--area', type=str, help='samearea or crossarea', default='samearea')
-parser.add_argument('--name', type=str, help='experiment description', default='gps_based_same_crorrected_simdict')
-parser.add_argument('--training', choices=('True', 'False'), default='True')
-parser.add_argument('--gps_sampling', choices=('True', 'False'), default='True')
+parser.add_argument('--name', type=str, help='experiment description', default='random_sampling_same-infer')
+parser.add_argument('--training', choices=('True', 'False'), default='False')
+parser.add_argument('--gps_sampling', type=bool, default=False)
+parser.add_argument('--random_sampling', type=bool, default=True)
 parser.add_argument('--pos_only', choices=('True', 'False'), default='True')
 parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-4)
 parser.add_argument('-b', '--batch_size', type=int, help='batch size', default=4)
@@ -144,8 +145,10 @@ if training:
     for epoch in range(15):  # loop over the dataset multiple times
         running_loss = 0.0
         CVM_model.train()
-        if args["gps_sampling"]:
+        if args['gps_sampling']:
             vigor.shuffle(sim_dict)
+        elif args['random_sampling']:
+            vigor.random_shuffle()
         for i, data in enumerate(train_dataloader, 0):
 
             # gt.shape[8, 1, 512, 512], gt_with_ori.shape[8, 20, 512, 512]
@@ -326,7 +329,7 @@ if training:
 else:
     torch.cuda.empty_cache()
     CVM_model = CVM_model = CVM(device, circular_padding)
-    test_model_path = '/home/test/code/CCVPE/models/VIGOR/crossarea_HFoV360/7/model_gps_based-crossarea-reproduce_2024-11-13 15:54:27.pt'
+    test_model_path = '/home/test/code/CCVPE/models/VIGOR/samearea_HFoV360/8/model_random_sampling_same_2024-11-17 15:33:17.pt'
     print('load model from: ' + test_model_path)
 
     CVM_model.load_state_dict(torch.load(test_model_path))

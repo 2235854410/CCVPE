@@ -9,6 +9,8 @@ import numpy as np
 import random
 from PIL import ImageFile
 
+from util import geodistance
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import torchvision.transforms.functional as TF
 import math
@@ -285,6 +287,75 @@ class VIGORDataset(Dataset):
             return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle, row_offset, col_offset, sat_path, grd_path
         else:
             return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
+
+    def random_shuffle(self, neighbour_select=4):
+
+        '''
+        random shuffle function for unique class_id sampling in batch
+        amples in one batch should keep gps distance > 100m
+        '''
+        print("\nRandom Shuffle Dataset:")
+
+        pair_pool = copy.deepcopy(self.pairs)
+        idx2pair_pool = copy.deepcopy(self.idx2pairs)
+
+        # Shuffle pairs order
+        for _ in range(5):
+            random.shuffle(pair_pool)
+
+        # Lookup if already used in epoch
+        pairs_epoch = set()
+        idx_batch = set()
+
+        # buckets
+        batches = []
+        current_batch = []
+
+        pbar = tqdm()
+
+        while True:
+            pbar.update()
+            if len(pair_pool) > 0:
+                pair = pair_pool.pop(0)
+                _, idx = pair
+
+                if idx not in idx_batch and pair not in pairs_epoch and len(current_batch) < self.shuffle_batch_size:
+                    add = True
+                    _, lat_main, long_main = self.idx2sat[idx][:-4].split('_')
+                    for i, id in current_batch:
+                        _, lat, long = self.idx2sat[id][:-4].split('_')
+                        dis = geodistance(lat_main, long_main, lat, long)
+                        if dis < 100:
+                            add = False
+                            pair_pool.append(pair)
+                            break
+                    if add:
+                        idx_batch.add(idx)
+                        current_batch.append(pair)
+                        pairs_epoch.add(pair)
+                        idx2pair_pool[idx].remove(pair)
+
+                else:
+                    if pair not in pairs_epoch:
+                        pair_pool.append(pair)
+
+            else:
+                break
+
+            if len(current_batch) >= self.shuffle_batch_size:
+                # empty current_batch bucket to batches
+                batches.extend(current_batch)
+                idx_batch = set()
+                current_batch = []
+        pbar.close()
+
+        time.sleep(0.3)
+
+        self.samples = batches
+        print("pair_pool:", len(pair_pool))
+        print("Original Length: {} - Length after Shuffle: {}".format(len(self.pairs), len(self.samples)))
+        print("Pairs left out of last batch to avoid creating noise:", len(self.pairs) - len(self.samples))
+        print("First Element ID: {} - Last Element ID: {}".format(self.samples[0][1], self.samples[-1][1]))
 
 
     def shuffle(self, sim_dict=None, neighbour_select=4, neighbour_range=8):
