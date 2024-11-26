@@ -20,10 +20,11 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
-# from datasets import VIGORDataset
-from datasets_with_sampling import VIGORDataset
-from losses import infoNCELoss, cross_entropy_loss, orientation_loss, contrastive_loss
+from datasets import VIGORDataset
+# from datasets_with_sampling import VIGORDataset
+from losses import infoNCELoss, cross_entropy_loss, orientation_loss, contrastive_loss, contrastive_loss_only_pos, triplet_loss
 from models import CVM_VIGOR as CVM
+from models import CVM_VIGOR_no_negative
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
 import pickle
 import wandb
@@ -35,16 +36,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 "The device is: {}".format(device)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--area', type=str, help='samearea or crossarea', default='samearea')
-parser.add_argument('--name', type=str, help='experiment description', default='random_sampling_same-infer')
-parser.add_argument('--training', choices=('True', 'False'), default='False')
-parser.add_argument('--gps_sampling', type=bool, default=False)
-parser.add_argument('--random_sampling', type=bool, default=True)
+parser.add_argument('--area', type=str, help='samearea or crossarea', default='crossarea')
+parser.add_argument('--name', type=str, help='experiment description', default='cross_triplet100')
+parser.add_argument('--training', type=bool, default=True)
+parser.add_argument('--gps_sampling', type=bool, default=True)
+parser.add_argument('--random_sampling', type=bool, default=False)
 parser.add_argument('--pos_only', choices=('True', 'False'), default='True')
 parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-4)
 parser.add_argument('-b', '--batch_size', type=int, help='batch size', default=4)
 parser.add_argument('--weight_ori', type=float, help='weight on orientation loss', default=1e1)
 parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss', default=1e4)
+parser.add_argument('--weight_triplet', type=float, help='weight on triplet loss', default=100)
 parser.add_argument('-f', '--FoV', type=int, help='field of view', default=360)
 parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation',
                     default=0)
@@ -56,26 +58,27 @@ learning_rate = args['learning_rate']
 batch_size = args['batch_size']
 weight_ori = args['weight_ori']
 weight_infoNCE = args['weight_infoNCE']
-training = args['training'] == 'True'
+weight_triplet = args['weight_triplet']
+training = args['training']
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
 label = area + '_HFoV' + str(FoV)
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18)  # round the closest multiple of 18 degrees within prior
-if area == 'crossarea':
-    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_cross_debug4.pkl"
-else:
-    GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_same_debug4.pkl"
-args['gps_dict_path'] = GPS_DICT_PATH
+# if area == 'crossarea':
+#     GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_cross_80data.pkl"
+# else:
+#     GPS_DICT_PATH = "/home/test/code/CCVPE/dataset/vigor_gps_dict_same_debug4.pkl"
+# args['gps_dict_path'] = GPS_DICT_PATH
 
 wandb.init(project="CCVPE-sampling", name=args['name'], config=args)
 print(args)
 start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
 print(f"\033[{31}m{start_time}\033[0m")
 
-with open(GPS_DICT_PATH, "rb") as f:
-    sim_dict = pickle.load(f)
+# with open(GPS_DICT_PATH, "rb") as f:
+#     sim_dict = pickle.load(f)
 
 if FoV == 360:
     circular_padding = True  # apply circular padding along the horizontal direction in the ground feature extractor
@@ -115,15 +118,15 @@ if training is True:
     # dataset_length = int(vigor.__len__())-10
 
     index_list = np.arange(vigor.__len__())
-    if area == 'samearea':
-        # some samples maybe excluded when using gps based sampling strategy cause can not find enough neighbors for a batch
-        index_list -= 5
+    # if area == 'samearea':
+    #     # some samples maybe excluded when using gps based sampling strategy cause can not find enough neighbors for a batch
+    #     index_list -= 5
     # np.random.shuffle(index_list)
     train_indices = index_list[0: int(len(index_list) * 0.8)]
     val_indices = index_list[int(len(index_list) * 0.8):]
     training_set = Subset(vigor, train_indices)
     val_set = Subset(vigor, val_indices)
-    train_dataloader = DataLoader(training_set, batch_size=batch_size, shuffle=False, num_workers=12)
+    train_dataloader = DataLoader(training_set, batch_size=batch_size, shuffle=True, num_workers=12)
     val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=12)
 else:
     test_dataloader = DataLoader(vigor, batch_size=8, shuffle=False, num_workers=12)
@@ -140,15 +143,11 @@ if training:
 
     global_step = 0
     # with torch.autograd.set_detect_anomaly(True):
-    wandb.watch(CVM_model, log="all", log_freq=100)
+    # wandb.watch(CVM_model, log="all", log_freq=100)
 
     for epoch in range(15):  # loop over the dataset multiple times
         running_loss = 0.0
         CVM_model.train()
-        if args['gps_sampling']:
-            vigor.shuffle(sim_dict)
-        elif args['random_sampling']:
-            vigor.random_shuffle()
         for i, data in enumerate(train_dataloader, 0):
 
             # gt.shape[8, 1, 512, 512], gt_with_ori.shape[8, 20, 512, 512]
@@ -196,25 +195,29 @@ if training:
             # loss_infoNCE4 = infoNCELoss(torch.flatten(matching_score_stacked4, start_dim=1), torch.flatten(gt_with_ori_bottleneck4, start_dim=1))
             # loss_infoNCE5 = infoNCELoss(torch.flatten(matching_score_stacked5, start_dim=1), torch.flatten(gt_with_ori_bottleneck5, start_dim=1))
             # loss_infoNCE6 = infoNCELoss(torch.flatten(matching_score_stacked6, start_dim=1), torch.flatten(gt_with_ori_bottleneck6, start_dim=1))
+            B = score_maps1.shape[0]
+            loss_infoNCE = contrastive_loss_only_pos(score_maps1[torch.arange(B), torch.arange(B)], gt_bottleneck)
+            loss_infoNCE2 = contrastive_loss_only_pos(score_maps2[torch.arange(B), torch.arange(B)], gt_bottleneck2)
+            loss_infoNCE3 = contrastive_loss_only_pos(score_maps3[torch.arange(B), torch.arange(B)], gt_bottleneck3)
+            loss_infoNCE4 = contrastive_loss_only_pos(score_maps4[torch.arange(B), torch.arange(B)], gt_bottleneck4)
+            loss_infoNCE5 = contrastive_loss_only_pos(score_maps5[torch.arange(B), torch.arange(B)], gt_bottleneck5)
+            loss_infoNCE6 = contrastive_loss_only_pos(score_maps6[torch.arange(B), torch.arange(B)], gt_bottleneck6)
 
-            loss_infoNCE = contrastive_loss(score_maps1, gt_bottleneck)
-            loss_infoNCE2 = contrastive_loss(score_maps2, gt_bottleneck2)
-            loss_infoNCE3 = contrastive_loss(score_maps3, gt_bottleneck3)
-            loss_infoNCE4 = contrastive_loss(score_maps4, gt_bottleneck4)
-            loss_infoNCE5 = contrastive_loss(score_maps5, gt_bottleneck5)
-            loss_infoNCE6 = contrastive_loss(score_maps6, gt_bottleneck6)
+            score_maps = [score_maps1, score_maps2, score_maps3, score_maps4, score_maps5, score_maps6]
+            triplet_loss_all = triplet_loss(score_maps, gt_bottleneck)
 
             loss_ce = cross_entropy_loss(logits_flattened, gt_flattened)
 
             # loss = loss_ce + weight_infoNCE*(loss_infoNCE+loss_infoNCE2+loss_infoNCE3+loss_infoNCE4+loss_infoNCE5+loss_infoNCE6)/6 + weight_ori*loss_ori
             loss = loss_ce + weight_infoNCE * (
-                        loss_infoNCE + loss_infoNCE2 + loss_infoNCE3 + loss_infoNCE4 + loss_infoNCE5 + loss_infoNCE6) / 6
+                        loss_infoNCE + loss_infoNCE2 + loss_infoNCE3 + loss_infoNCE4 + loss_infoNCE5 + loss_infoNCE6) / 6 + \
+                weight_triplet * triplet_loss_all
 
             if i % 100 == 0:
                 wandb.log({'contrastive_loss1': loss_infoNCE, "contrastive_loss2": loss_infoNCE2,
-                           "contrastive_loss3": loss_infoNCE3 \
+                           "contrastive_loss3": loss_infoNCE3
                               , "contrastive_loss4": loss_infoNCE4, "contrastive_loss5": loss_infoNCE5,
-                           "contrastive_loss6": loss_infoNCE6, "total loss": loss})
+                           "contrastive_loss6": loss_infoNCE6, "tripet_loss": triplet_loss_all, "total loss": loss})
 
             loss.backward()
             optimizer.step()
@@ -328,8 +331,8 @@ if training:
 
 else:
     torch.cuda.empty_cache()
-    CVM_model = CVM_model = CVM(device, circular_padding)
-    test_model_path = '/home/test/code/CCVPE/models/VIGOR/samearea_HFoV360/8/model_random_sampling_same_2024-11-17 15:33:17.pt'
+    CVM_model = CVM_VIGOR_no_negative(device, circular_padding)
+    test_model_path = '/home/test/code/CCVPE/models/VIGOR/crossarea_HFoV360/6/model_no_sampling_cross_only_pos_2024-11-19 09:31:16.pt'
     print('load model from: ' + test_model_path)
 
     CVM_model.load_state_dict(torch.load(test_model_path))

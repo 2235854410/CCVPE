@@ -33,6 +33,7 @@ def contrastive_loss(score_map, labels, temperature=0.1):
 
     # 将 score_map 和 labels 展开，以计算 Softmax 概率
     scores = score_map.view(B, B, -1) / temperature  # (B, B, H*W)
+
     bool_mask = labels.view(B, -1) > 1e-2  # 展开后的 bool_mask，(B, H*W)
 
     # 计算 exp(scores) 并进行归一化
@@ -43,8 +44,48 @@ def contrastive_loss(score_map, labels, temperature=0.1):
     # 计算每个正样本对的 softmax 概率，仅包括 gt 点
     # prob_pos = (exp_scores.diagonal(dim1=0, dim2=1) / denom.squeeze(-1))  # (B, H*W)
     exp_pos_samples = exp_scores[torch.arange(B), torch.arange(B)] #[4, 64]
-    denom_pos = torch.sum(exp_pos_samples, dim=1, keepdim=True)
+    gt_prob = exp_pos_samples * bool_mask
     prob_pos = (exp_pos_samples / denom)  # (B, H*W)
+
+    # 对正样本概率取对数，并计算带权重的损失
+    log_prob_pos = torch.log(prob_pos + 1e-10)  # 加一个小数防止 log(0)
+    loss_pos = -torch.sum(log_prob_pos.to(labels.device) * bool_mask.float()) / torch.sum(bool_mask.float())  # 只对 gt 点求平均
+
+    return loss_pos
+
+
+def triplet_loss(score_maps, labels):
+    matching_losses = []
+    for i in range(len(score_maps)):
+        B, _, _, H, W = score_maps[i].shape
+
+        # 将 score_map 和 labels 展开，以计算 Softmax 概率
+        scores = score_maps[i].view(B, B, -1)  # (B, B, H*W)
+
+        max_scores = torch.max(scores, dim=-1)[0] # (B, B)
+        pos = torch.diagonal(max_scores) # (B)
+        delta = max_scores - pos.reshape(-1, 1) # big delta means negative localization have high confidence
+        loss = torch.sum(torch.log(1 + torch.exp(delta * 10))) / (B * (B - 1))
+
+        matching_losses.append(loss)
+
+    return torch.mean(torch.stack(matching_losses, dim=0))
+
+def contrastive_loss_only_pos(score_map, labels, temperature=0.1):
+    B, _, H, W = score_map.shape
+
+    # 将 score_map 和 labels 展开，以计算 Softmax 概率
+    scores = score_map.view(B, -1) / temperature  # (B, H*W)
+    bool_mask = labels.view(B, -1) > 1e-2  # 展开后的 bool_mask，(B, H*W)
+
+    # 计算 exp(scores) 并进行归一化
+    exp_scores = torch.exp(scores)
+
+    # 计算每个正样本对的 softmax 概率，仅包括 gt 点
+    # prob_pos = (exp_scores.diagonal(dim1=0, dim2=1) / denom.squeeze(-1))  # (B, H*W)
+    # exp_pos_samples = exp_scores[torch.arange(B), torch.arange(B)] #[4, 64]
+    denom_pos = torch.sum(exp_scores, dim=1, keepdim=True)
+    prob_pos = (exp_scores / denom_pos)  # (B, H*W)
 
     # 对正样本概率取对数，并计算带权重的损失
     log_prob_pos = torch.log(prob_pos + 1e-10)  # 加一个小数防止 log(0)

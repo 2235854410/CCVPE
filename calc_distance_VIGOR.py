@@ -62,12 +62,12 @@ def calc_cross_area():
             _, lat, long = idx2sat[train_sat_ids[id]][:-4].split('_')
             # print(f"lat_main: {lat_main}, long_main: {long_main}, lat: {lat}, long: {long}")
             dis = geodistance(lat_main, long_main, lat, long)
-            if dis > 100 and count < BATCH_SIZE:
+            if dis > 110 and count < BATCH_SIZE:
                 add = True
                 for j in selected_ids:
                     _, lat1, long1 = idx2sat[train_sat_ids[j]][:-4].split('_')
                     dis1 = geodistance(lat, long, lat1, long1)
-                    if dis1 < 100:
+                    if dis1 < 110:
                         add = False
                         break
                 if add:
@@ -87,7 +87,7 @@ def calc_cross_area():
     #     near_neighbors[idx] = train_sat_ids[ids_near[i]].tolist()
 
     print("Saving...")
-    with open("dataset/vigor_gps_dict_cross_debug4.pkl", "wb") as f:
+    with open("dataset/vigor_gps_dict_cross_80data.pkl", "wb") as f:
         pickle.dump(near_neighbors, f)
 
 # -----------------------------------------------------------------------------#
@@ -170,4 +170,4 @@ def calc_same_area():
         pickle.dump(near_neighbors, f)
 
 if __name__ == '__main__':
-    calc_same_area()
+    calc_cross_area()

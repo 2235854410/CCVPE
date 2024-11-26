@@ -140,7 +140,8 @@ class VIGORDataset(Dataset):
             else:
                 df_tmp = pd.read_csv(f'{self.root}/splits__corrected/{city}/pano_label_balanced__corrected.txt', header=None,
                                      delim_whitespace=True)
-
+            # 只取80%的数据
+            df_tmp = df_tmp.iloc[:int(0.8 * len(df_tmp))]
             df_tmp = df_tmp.loc[:, [0, 1, 2, 3, 4, 7, 10]].rename(columns={0: "ground",
                                                                            1: "sat",
                                                                            2: "delta_x",
@@ -193,6 +194,7 @@ class VIGORDataset(Dataset):
         # self.label = self.df_ground[["sat", "sat_np1", "sat_np2", "sat_np3"]].values
 
         self.samples = copy.deepcopy(self.pairs)
+
         print(f"total samples = {len(self.samples)}")
 
     def __len__(self):
