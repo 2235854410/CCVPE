@@ -11,6 +11,9 @@ import random
 from PIL import ImageFile
 from torch.utils.tensorboard import SummaryWriter
 import math
+
+# from dino import DINO
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 torch.manual_seed(17)
 np.random.seed(0)

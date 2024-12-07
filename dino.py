@@ -2,7 +2,7 @@ import time
 
 import torch
 
-from .utils.utils import center_padding, tokens_to_output
+from utils import center_padding, tokens_to_output
 from torch.nn.functional import interpolate
 import torch.nn as nn
 import torch.nn.functional as F
@@ -22,6 +22,7 @@ class DINO(torch.nn.Module):
         down_sample=False,
     ):
         super().__init__()
+        # dinov2 only have patch size=14
         feat_dims = {
             "vitb8": 768,
             "vitb16": 768,
@@ -57,11 +58,15 @@ class DINO(torch.nn.Module):
         feat_dim = feat_dim * 2 if output == "dense-cls" else feat_dim
 
         num_layers = len(self.vit.blocks)
+        # print(f"Number of layers in DINOv2: {num_layers}")
+        # dinov2b14 has 12 layers in total
         multilayers = [
-            num_layers // 4 - 1,
-            num_layers // 2 - 1,
-            num_layers // 4 * 3 - 1,
-            num_layers - 1,
+            num_layers // 4 - 2, # 1
+            num_layers // 4, # 3
+            num_layers // 2 - 1, # 5
+            num_layers // 2 + 1, #7
+            num_layers // 4 * 3, # 9
+            num_layers - 1, #11
         ]
 
         if return_multilayer:
@@ -80,6 +85,7 @@ class DINO(torch.nn.Module):
 
         images = center_padding(images, self.patch_size)
         h, w = images.shape[-2:]
+        # print(f"patch size: {self.patch_size}")
         h, w = h // self.patch_size, w // self.patch_size
 
         if self.model_name == "dinov2":
@@ -104,9 +110,9 @@ class DINO(torch.nn.Module):
             x_i = tokens_to_output(self.output, spatial, cls_tok, (h, w))
             outputs.append(x_i)
 
-        res = self.dpt(outputs)
-        x = F.interpolate(res, size=(16,16), mode='bilinear', align_corners=True)
+        # res = self.dpt(outputs)
+        # x = F.interpolate(res, size=(16,16), mode='bilinear', align_corners=True)
 
 
-
-        return outputs[0], x
+        # return outputs[0], x
+        return outputs[0] if len(outputs) == 1 else outputs
