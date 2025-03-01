@@ -114,7 +114,36 @@ class VIGORDataset(Dataset):
                 rotation = np.random.uniform(low=-rotation_range, high=rotation_range)
         else:
             rotation = self.random_orientation[idx] / 360
-            
+        #
+        h, w, c = grd.shape
+        masked_fov = 360 - np.random.randint(180, 240)
+
+        start_angle1 = np.random.randint(0, 360 - masked_fov)
+        w_start1 = int(np.round(w / 360 * start_angle1))
+        w_end1 = int(np.round(w / 360 * (start_angle1 + masked_fov)))
+
+        right_part = grd[:, w_end1:, :]  # 右侧未被裁剪的部分（w_end到末尾）
+        left_part = grd[:, :w_start1, :]  # 左侧未被裁剪的部分（开头到w_start）
+        cropped_pano = np.concatenate([right_part, left_part], axis=1)  # 环形拼接
+        # 创建两个 mask，并应用到原图像上
+
+        mask1 = torch.zeros_like(grd)
+        mask2 = torch.zeros_like(grd)
+        pano1 = grd.clone()
+        pano2 = grd.clone()
+        ones1 = torch.ones_like(grd)
+        ones2 = torch.ones_like(grd)
+
+
+        pano1[:, w_start1:w_end1, :] = mask1[:, w_start1:w_end1, :]
+        # pano2[:, w_start2:w_end2, :] = mask2[:, w_start2:w_end2, :]
+        ones1[:, w_start1:w_end1, :] = mask1[:, w_start1:w_end1, :]
+        # ones2[:, w_start2:w_end2, :] = mask2[:, w_start2:w_end2, :]
+        ones2 = ones2 - ones1
+        pano2 = pano2 * ones2
+
+        grd = pano1
+
         grd = torch.roll(grd, (torch.round(torch.as_tensor(rotation)*grd.size()[2]).int()).item(), dims=2)
                 
         orientation_angle = rotation * 360 # 0 means heading North, counter-clockwise increasing

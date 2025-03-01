@@ -6,7 +6,7 @@ import time
 # os.environ["MKL_NUM_THREADS"] = "4" 
 # os.environ["NUMEXPR_NUM_THREADS"] = "4" 
 # os.environ["OMP_NUM_THREADS"] = "4" 
-os.environ['CUDA_VISIBLE_DEVICES'] = "2"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 import argparse
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
@@ -18,7 +18,7 @@ from datasets import VIGORDataset
 from losses import infoNCELoss, cross_entropy_loss, orientation_loss
 from models import CVM_VIGOR as CVM
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
-import wandb
+# import wandb
 
 torch.manual_seed(17)
 np.random.seed(0)
@@ -28,7 +28,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 parser = argparse.ArgumentParser()
 parser.add_argument('--area', type=str, help='samearea or crossarea', default='crossarea')
 parser.add_argument('--name', type=str, help='experiment description', default='vanilla CCVPE in cross area')
-parser.add_argument('--training', choices=('True','False'), default='True')
+parser.add_argument('--training', choices=('True','False'), default='False')
 parser.add_argument('--pos_only', choices=('True','False'), default='True')
 parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-4)
 parser.add_argument('-b', '--batch_size', type=int, help='batch size', default=8)
@@ -53,7 +53,7 @@ ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 print(args)
 print(f"\033[{31}m{time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))}\033[0m")
-wandb.init(project="CCVPE-sampling", name=args['name'], config=args)
+# wandb.init(project="CCVPE-sampling", name=args['name'], config=args)
 
 
 if FoV == 360:
@@ -114,7 +114,7 @@ if training:
 
     global_step = 0
     # with torch.autograd.set_detect_anomaly(True):
-    wandb.watch(CVM_model, log="all", log_freq=100)
+    # wandb.watch(CVM_model, log="all", log_freq=100)
 
     for epoch in range(15):  # loop over the dataset multiple times
         running_loss = 0.0
@@ -156,10 +156,10 @@ if training:
             loss_ce =  cross_entropy_loss(logits_flattened, gt_flattened)
 
             loss = loss_ce + weight_infoNCE*(loss_infoNCE+loss_infoNCE2+loss_infoNCE3+loss_infoNCE4+loss_infoNCE5+loss_infoNCE6)/6 + weight_ori*loss_ori
-            if i% 100 ==0:
-                wandb.log({'contrastive_loss1': loss_infoNCE, "contrastive_loss2": loss_infoNCE2,"contrastive_loss3": loss_infoNCE3 \
-                          , "contrastive_loss4": loss_infoNCE4, "contrastive_loss5": loss_infoNCE5,"contrastive_loss6": loss_infoNCE6, "total loss": loss})
-
+            # if i% 100 ==0:
+            #     wandb.log({'contrastive_loss1': loss_infoNCE, "contrastive_loss2": loss_infoNCE2,"contrastive_loss3": loss_infoNCE3 \
+            #               , "contrastive_loss4": loss_infoNCE4, "contrastive_loss5": loss_infoNCE5,"contrastive_loss6": loss_infoNCE6, "total loss": loss})
+            #
 
 
             loss.backward()
@@ -261,12 +261,12 @@ if training:
 
 
     print('Finished Training')
-    wandb.finish()
+    # wandb.finish()
 
 else:
     torch.cuda.empty_cache()
     CVM_model = CVM_with_ori_prior(device, ori_noise, circular_padding)
-    test_model_path = 'models/VIGOR/samearea/model.pt'
+    test_model_path = 'models/model_no_sampling_cross_only_pos_2024-11-19 09_31_16.pt'
     print('load model from: ' + test_model_path)
 
     CVM_model.load_state_dict(torch.load(test_model_path))
@@ -283,7 +283,7 @@ else:
     probability_at_gt = []
 
     for i, data in enumerate(test_dataloader, 0):
-        print(i)
+        # print(i)
         grd, sat, gt, gt_with_ori, gt_orientation, city, orientation_angle = data
         grd = grd.to(device)
         sat = sat.to(device)
