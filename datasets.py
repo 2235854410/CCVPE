@@ -114,40 +114,42 @@ class VIGORDataset(Dataset):
                 rotation = np.random.uniform(low=-rotation_range, high=rotation_range)
         else:
             rotation = self.random_orientation[idx] / 360
-        #
-        h, w, c = grd.shape
-        masked_fov = 360 - np.random.randint(180, 240)
-
-        start_angle1 = np.random.randint(0, 360 - masked_fov)
-        w_start1 = int(np.round(w / 360 * start_angle1))
-        w_end1 = int(np.round(w / 360 * (start_angle1 + masked_fov)))
-
-        right_part = grd[:, w_end1:, :]  # 右侧未被裁剪的部分（w_end到末尾）
-        left_part = grd[:, :w_start1, :]  # 左侧未被裁剪的部分（开头到w_start）
-        cropped_pano = np.concatenate([right_part, left_part], axis=1)  # 环形拼接
-        # 创建两个 mask，并应用到原图像上
-
-        mask1 = torch.zeros_like(grd)
-        mask2 = torch.zeros_like(grd)
-        pano1 = grd.clone()
-        pano2 = grd.clone()
-        ones1 = torch.ones_like(grd)
-        ones2 = torch.ones_like(grd)
-
-
-        pano1[:, w_start1:w_end1, :] = mask1[:, w_start1:w_end1, :]
-        # pano2[:, w_start2:w_end2, :] = mask2[:, w_start2:w_end2, :]
-        ones1[:, w_start1:w_end1, :] = mask1[:, w_start1:w_end1, :]
-        # ones2[:, w_start2:w_end2, :] = mask2[:, w_start2:w_end2, :]
-        ones2 = ones2 - ones1
-        pano2 = pano2 * ones2
-
-        grd = pano1
 
         grd = torch.roll(grd, (torch.round(torch.as_tensor(rotation)*grd.size()[2]).int()).item(), dims=2)
-                
+        grd_copy = grd.clone()
+        grd_copy = torch.roll(grd_copy, (torch.round(torch.as_tensor(random.uniform(-1.0, 1.0))*grd.size()[2]).int()).item(), dims=2)
+        w = grd.shape[-1]
+        w_start = w // 4
+        w_end = w // 4 * 3
+
+        grd_cut = grd_copy[:, :, w_start:w_end]
+        # 根据方向裁剪
+        # if direction == 0:
+        #     grd_cut = grd[:, :, w:w_half]  # 左半部分
+        # else:
+        #     grd_cut = grd[:, :, w_half:]  # 右半部分
+        # #
+        # # masked_fov = 360 - np.random.randint(180, 240)
+        # _, h, w = grd.shape
+        # masked_fov = 180  # 120度固定遮盖
+        #
+        # # 计算精确的遮盖像素宽度（确保所有样本一致）
+        # exact_masked_width = int(round(w * masked_fov / 360))  # 关键点：固定遮盖宽度
+        # max_start = w - exact_masked_width  # 最大起始像素位置
+        #
+        # # 生成随机起始位置（确保不越界）
+        # start_pixel = np.random.randint(0, max_start + 1)  # [0, max_start]
+        # w_start1 = start_pixel
+        # w_end1 = start_pixel + exact_masked_width
+        #
+        # # 裁剪并拼接
+        # left_part = grd[:, :, :w_start1]
+        # right_part = grd[:, :, w_end1:]
+        # grd_cut = torch.cat([left_part, right_part], dim=2).contiguous()
+
+
         orientation_angle = rotation * 360 # 0 means heading North, counter-clockwise increasing
-        
+        #
         # satellite
         if self.pos_only: # load positives only
             pos_index = 0
@@ -203,7 +205,7 @@ class VIGORDataset(Dataset):
         elif 'Chicago' in self.grd_list[idx]:
             city = 'Chicago'
             
-        return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
+        return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle, grd_cut
 
     
 # ---------------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 def infoNCELoss(scores, labels, temperature=0.1):
     """
     Contrastive loss over matching score. Adapted from https://arxiv.org/pdf/2004.11362.pdf Eq.2
@@ -23,7 +23,17 @@ def infoNCELoss(scores, labels, temperature=0.1):
 def cross_entropy_loss(logits, labels):
     return -torch.sum(labels * nn.LogSoftmax(dim=1)(logits)) / logits.size()[0]
 
-        
-    
+
+def cross_entropy(pred, target, s_temp=0.06, t_temp=0.06, eps=1e-8):
+    b = pred.shape[0]
+
+    # 使用 log_softmax 替代 softmax + log 操作
+    pred_softmax = F.softmax(pred / s_temp, dim=1)
+    target_softmax = F.softmax(target / t_temp, dim=1)
+
+    # 添加极小值 eps 避免 log(0)
+    loss = -torch.sum(target_softmax * torch.log(pred_softmax + eps), dim=1)
+    return torch.mean(loss)
+
 def orientation_loss(ori, gt_orientation, gt):    
     return torch.sum(torch.sum(torch.square(gt_orientation-ori), dim=1, keepdim=True) * gt) / ori.size()[0]
