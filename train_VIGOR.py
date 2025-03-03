@@ -204,8 +204,18 @@ if training:
             # loss_infoNCE5 = infoNCELoss(torch.flatten(matching_score_stacked5, start_dim=1), torch.flatten(gt_bottleneck5, start_dim=1))
             # loss_infoNCE6 = infoNCELoss(torch.flatten(matching_score_stacked6, start_dim=1), torch.flatten(gt_bottleneck6, start_dim=1))
             # loss_ce =  cross_entropy_loss(logits_flattened, gt_flattened)
-            loss = cross_entropy(logits_flattened_s, logits_flattened_t)
+            b = matching_score_stacked_s.shape[0]
+            # loss1 = cross_entropy(matching_score_stacked_s.view(b, -1), matching_score_stacked_t.view(b, -1))
+            # loss2 = cross_entropy(matching_score_stacked2_s.view(b, -1), matching_score_stacked2_t.view(b, -1))
+            # loss3 = cross_entropy(matching_score_stacked3_s.view(b, -1), matching_score_stacked3_t.view(b, -1))
+            # loss4 = cross_entropy(matching_score_stacked4_s.view(b, -1), matching_score_stacked4_t.view(b, -1))
+            # loss5 = cross_entropy(matching_score_stacked5_s.view(b, -1), matching_score_stacked5_t.view(b, -1))
+            # loss6 = cross_entropy(matching_score_stacked6_s.view(b, -1), matching_score_stacked6_t.view(b, -1))
 
+            loss_ce = cross_entropy(logits_flattened_s, logits_flattened_t)
+
+            # loss = loss_ce + (loss1 + loss2 + loss3 + loss4 + loss5 + loss6)/6
+            loss = loss_ce
             # loss = loss_ce + weight_infoNCE*(loss_infoNCE+loss_infoNCE2+loss_infoNCE3+loss_infoNCE4+loss_infoNCE5+loss_infoNCE6)/6 + weight_ori*loss_ori
             # if i % 100 == 0 and record:
             #     wandb.log({'contrastive_loss1': loss_infoNCE, "contrastive_loss2": loss_infoNCE2,
@@ -425,7 +435,7 @@ if training:
 else:
     torch.cuda.empty_cache()
     CVM_model = CVM_with_ori_prior(device, ori_noise, circular_padding)
-    test_model_path = '/data/test/code/CCVPE/models/VIGOR/crossarea_HFoV360/6/teacher_cross-fov180-240_model.pt'
+    test_model_path = '/data/test/code/CCVPE/models/VIGOR/crossarea_HFoV360/5/teacher_crossarea-fov180-240_model.pt'
     print('load model from: ' + test_model_path)
 
     CVM_model.load_state_dict(torch.load(test_model_path))
