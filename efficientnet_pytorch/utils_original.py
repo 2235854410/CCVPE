@@ -15,6 +15,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils import model_zoo
 
+
 ################################################################################
 # Help functions for model architecture
 ################################################################################
@@ -217,72 +218,39 @@ def get_same_padding_conv2d(circular, image_size=None):
             return partial(Conv2dStaticSamePadding, image_size=image_size)
 
 
-# # zero padding
-# class Conv2dDynamicSamePadding(nn.Conv2d):
-#     """2D Convolutions like TensorFlow, for a dynamic image size.
-#        The padding is operated in forward function by calculating dynamically.
-#     """
+class Conv2dDynamicSamePadding(nn.Conv2d):
+    """2D Convolutions like TensorFlow, for a dynamic image size.
+       The padding is operated in forward function by calculating dynamically.
+    """
 
-#     # Tips for 'SAME' mode padding.
-#     #     Given the following:
-#     #         i: width or height
-#     #         s: stride
-#     #         k: kernel size
-#     #         d: dilation
-#     #         p: padding
-#     #     Output after Conv2d:
-#     #         o = floor((i+p-((k-1)*d+1))/s+1)
-#     # If o equals i, i = floor((i+p-((k-1)*d+1))/s+1),
-#     # => p = (i-1)*s+((k-1)*d+1)-i
+    # Tips for 'SAME' mode padding.
+    #     Given the following:
+    #         i: width or height
+    #         s: stride
+    #         k: kernel size
+    #         d: dilation
+    #         p: padding
+    #     Output after Conv2d:
+    #         o = floor((i+p-((k-1)*d+1))/s+1)
+    # If o equals i, i = floor((i+p-((k-1)*d+1))/s+1),
+    # => p = (i-1)*s+((k-1)*d+1)-i
 
-#     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1, bias=True):
-#         super().__init__(in_channels, out_channels, kernel_size, stride, 0, dilation, groups, bias)
-#         self.stride = self.stride if len(self.stride) == 2 else [self.stride[0]] * 2
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1, bias=True):
+        super().__init__(in_channels, out_channels, kernel_size, stride, 0, dilation, groups, bias)
+        self.stride = self.stride if len(self.stride) == 2 else [self.stride[0]] * 2
 
-#     def forward(self, x):
-#         ih, iw = x.size()[-2:]
-#         kh, kw = self.weight.size()[-2:]
-#         sh, sw = self.stride
-#         oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)  # change the output size according to stride ! ! !
-#         pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
-#         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
-#         if pad_h > 0 or pad_w > 0:
-#             x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2])
-#         return F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
-
-
-# class Conv2dStaticSamePadding(nn.Conv2d):
-#     """2D Convolutions like TensorFlow's 'SAME' mode, with the given input image size.
-#        The padding mudule is calculated in construction function, then used in forward.
-#     """
-
-#     # With the same calculation as Conv2dDynamicSamePadding
-
-#     def __init__(self, in_channels, out_channels, kernel_size, stride=1, image_size=None, **kwargs):
-#         super().__init__(in_channels, out_channels, kernel_size, stride, **kwargs)
-#         self.stride = self.stride if len(self.stride) == 2 else [self.stride[0]] * 2
-
-#         # Calculate padding based on image size and save it
-#         assert image_size is not None
-#         ih, iw = (image_size, image_size) if isinstance(image_size, int) else image_size
-#         kh, kw = self.weight.size()[-2:]
-#         sh, sw = self.stride
-#         oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
-#         pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
-#         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
-#         if pad_h > 0 or pad_w > 0:
-#             self.static_padding = nn.ZeroPad2d((pad_w // 2, pad_w - pad_w // 2,
-#                                                 pad_h // 2, pad_h - pad_h // 2))
-#         else:
-#             self.static_padding = nn.Identity()
-
-#     def forward(self, x):
-#         x = self.static_padding(x)
-#         x = F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
-#         return x
+    def forward(self, x):
+        ih, iw = x.size()[-2:]
+        kh, kw = self.weight.size()[-2:]
+        sh, sw = self.stride
+        oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)  # change the output size according to stride ! ! !
+        pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
+        pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
+        if pad_h > 0 or pad_w > 0:
+            x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2])
+        return F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
 
 
-# reflect padding
 class Conv2dStaticSamePadding(nn.Conv2d):
     """2D Convolutions like TensorFlow's 'SAME' mode, with the given input image size.
        The padding mudule is calculated in construction function, then used in forward.
@@ -303,8 +271,8 @@ class Conv2dStaticSamePadding(nn.Conv2d):
         pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
         if pad_h > 0 or pad_w > 0:
-            self.static_padding = nn.ReflectionPad2d((pad_w // 2, pad_w - pad_w // 2,
-                                                      pad_h // 2, pad_h - pad_h // 2))
+            self.static_padding = nn.ZeroPad2d((pad_w // 2, pad_w - pad_w // 2,
+                                                pad_h // 2, pad_h - pad_h // 2))
         else:
             self.static_padding = nn.Identity()
 
@@ -343,10 +311,9 @@ class Conv2dDynamicCircularPadding(nn.Conv2d):
         pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
         if pad_h > 0 or pad_w > 0:
-            x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, 0, 0], mode='circular')  # horizontal circular padding
-            x = F.pad(x, [0, 0, pad_h // 2, pad_h - pad_h // 2])  # vertical constant padding with zeros
+            x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, 0, 0], mode='circular') # horizontal circular padding
+            x = F.pad(x, [0, 0, pad_h // 2, pad_h - pad_h // 2]) # vertical constant padding with zeros
         return F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
-
 
 class custom_nn_CircularPad2d(nn.Module):
     def __init__(self, L, R, T, B):
@@ -355,11 +322,11 @@ class custom_nn_CircularPad2d(nn.Module):
         self.R = R
         self.T = T
         self.B = B
-
+        
     def forward(self, x):
         return F.pad(x, [self.L, self.R, self.T, self.B], mode='circular')
 
-
+    
 class Conv2dStaticCircularPadding(nn.Conv2d):
     """2D Convolutions like TensorFlow's 'SAME' mode, with the given input image size.
        The padding mudule is calculated in construction function, then used in forward.
@@ -390,175 +357,141 @@ class Conv2dStaticCircularPadding(nn.Conv2d):
         x = F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
         return x
 
+    
+def get_same_padding_maxPool2d(circular, image_size=None):
+    """Chooses static padding if you have specified an image size, and dynamic padding otherwise.
+       Static padding is necessary for ONNX exporting of models.
 
-# def get_same_padding_maxPool2d(circular, image_size=None):
-#     """Chooses static padding if you have specified an image size, and dynamic padding otherwise.
-#        Static padding is necessary for ONNX exporting of models.
+    Args:
+        image_size (int or tuple): Size of the image.
+        circular: True or False, if use circular padding in horizontal direction.
 
-#     Args:
-#         image_size (int or tuple): Size of the image.
-#         circular: True or False, if use circular padding in horizontal direction.
-
-#     Returns:
-#         MaxPool2dDynamicSamePadding or MaxPool2dStaticSamePadding, or circular padding version.
-#     """
-#     if image_size is None:
-#         if circular:
-#             return MaxPool2dDynamicCircularPadding
-#         else:
-#             return MaxPool2dDynamicSamePadding
-#     else:
-#         if circular:
-#             return partial(MaxPool2dStaticCircularPadding, image_size=image_size)
-#         else:
-#             return partial(MaxPool2dStaticSamePadding, image_size=image_size)
-
-
-# class MaxPool2dDynamicSamePadding(nn.MaxPool2d):
-#     """2D MaxPooling like TensorFlow's 'SAME' mode, with a dynamic image size.
-#        The padding is operated in forward function by calculating dynamically.
-#     """
-
-#     def __init__(self, kernel_size, stride, padding=0, dilation=1, return_indices=False, ceil_mode=False):
-#         super().__init__(kernel_size, stride, padding, dilation, return_indices, ceil_mode)
-#         self.stride = [self.stride] * 2 if isinstance(self.stride, int) else self.stride
-#         self.kernel_size = [self.kernel_size] * 2 if isinstance(self.kernel_size, int) else self.kernel_size
-#         self.dilation = [self.dilation] * 2 if isinstance(self.dilation, int) else self.dilation
-
-#     def forward(self, x):
-#         print('MaxPool2dDynamicSamePadding')
-#         ih, iw = x.size()[-2:]
-#         kh, kw = self.kernel_size
-#         sh, sw = self.stride
-#         oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
-#         pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
-#         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
-#         if pad_h > 0 or pad_w > 0:
-#             x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2])
-#         return F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
-#                             self.dilation, self.ceil_mode, self.return_indices)
-
-# # zero padding
-# class MaxPool2dStaticSamePadding(nn.MaxPool2d):
-#     """2D MaxPooling like TensorFlow's 'SAME' mode, with the given input image size.
-#        The padding mudule is calculated in construction function, then used in forward.
-#     """
-
-#     def __init__(self, kernel_size, stride, image_size=None, **kwargs):
-#         super().__init__(kernel_size, stride, **kwargs)
-#         self.stride = [self.stride] * 2 if isinstance(self.stride, int) else self.stride
-#         self.kernel_size = [self.kernel_size] * 2 if isinstance(self.kernel_size, int) else self.kernel_size
-#         self.dilation = [self.dilation] * 2 if isinstance(self.dilation, int) else self.dilation
-
-#         # Calculate padding based on image size and save it
-#         assert image_size is not None
-#         ih, iw = (image_size, image_size) if isinstance(image_size, int) else image_size
-#         kh, kw = self.kernel_size
-#         sh, sw = self.stride
-#         oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
-#         pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
-#         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
-#         if pad_h > 0 or pad_w > 0:
-#             self.static_padding = nn.ZeroPad2d((pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2))
-#         else:
-#             self.static_padding = nn.Identity()
-
-#     def forward(self, x):
-#         print('MaxPool2dStaticSamePadding')
-#         x = self.static_padding(x)
-#         x = F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
-#                          self.dilation, self.ceil_mode, self.return_indices)
-#         return x
-
-# # reflect padding
-# class MaxPool2dStaticSamePadding(nn.MaxPool2d):
-#     """2D MaxPooling like TensorFlow's 'SAME' mode, with the given input image size.
-#        The padding mudule is calculated in construction function, then used in forward.
-#     """
-
-#     def __init__(self, kernel_size, stride, image_size=None, **kwargs):
-#         super().__init__(kernel_size, stride, **kwargs)
-#         self.stride = [self.stride] * 2 if isinstance(self.stride, int) else self.stride
-#         self.kernel_size = [self.kernel_size] * 2 if isinstance(self.kernel_size, int) else self.kernel_size
-#         self.dilation = [self.dilation] * 2 if isinstance(self.dilation, int) else self.dilation
-
-#         # Calculate padding based on image size and save it
-#         assert image_size is not None
-#         ih, iw = (image_size, image_size) if isinstance(image_size, int) else image_size
-#         kh, kw = self.kernel_size
-#         sh, sw = self.stride
-#         oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
-#         pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
-#         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
-#         if pad_h > 0 or pad_w > 0:
-#             self.static_padding = nn.ReflectionPad2d((pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2))
-#         else:
-#             self.static_padding = nn.Identity()
-
-#     def forward(self, x):
-#         print('MaxPool2dStaticSamePadding')
-#         x = self.static_padding(x)
-#         x = F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
-#                          self.dilation, self.ceil_mode, self.return_indices)
-#         return x
-
-# class MaxPool2dDynamicCircularPadding(nn.MaxPool2d):
-#     """2D MaxPooling like TensorFlow's 'SAME' mode, with a dynamic image size.
-#        The padding is operated in forward function by calculating dynamically.
-#     """
-
-#     def __init__(self, kernel_size, stride, padding=0, dilation=1, return_indices=False, ceil_mode=False):
-#         super().__init__(kernel_size, stride, padding, dilation, return_indices, ceil_mode)
-#         self.stride = [self.stride] * 2 if isinstance(self.stride, int) else self.stride
-#         self.kernel_size = [self.kernel_size] * 2 if isinstance(self.kernel_size, int) else self.kernel_size
-#         self.dilation = [self.dilation] * 2 if isinstance(self.dilation, int) else self.dilation
-
-#     def forward(self, x):
-#         ih, iw = x.size()[-2:]
-#         kh, kw = self.kernel_size
-#         sh, sw = self.stride
-#         oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
-#         pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
-#         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
-#         if pad_h > 0 or pad_w > 0:
-#             x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, 0, 0], mode='circular') # horizontal circular padding
-#             x = F.pad(x, [0, 0, pad_h // 2, pad_h - pad_h // 2]) # vertical constant padding with zeros
-#         return F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
-#                             self.dilation, self.ceil_mode, self.return_indices)
+    Returns:
+        MaxPool2dDynamicSamePadding or MaxPool2dStaticSamePadding, or circular padding version.
+    """
+    if image_size is None:
+        if circular:
+            return MaxPool2dDynamicCircularPadding
+        else:
+            return MaxPool2dDynamicSamePadding
+    else:
+        if circular:
+            return partial(MaxPool2dStaticCircularPadding, image_size=image_size)
+        else:    
+            return partial(MaxPool2dStaticSamePadding, image_size=image_size)
 
 
-# class MaxPool2dStaticCircularPadding(nn.MaxPool2d):
-#     """2D MaxPooling like TensorFlow's 'SAME' mode, with the given input image size.
-#        The padding mudule is calculated in construction function, then used in forward.
-#     """
+class MaxPool2dDynamicSamePadding(nn.MaxPool2d):
+    """2D MaxPooling like TensorFlow's 'SAME' mode, with a dynamic image size.
+       The padding is operated in forward function by calculating dynamically.
+    """
 
-#     def __init__(self, kernel_size, stride, image_size=None, **kwargs):
-#         super().__init__(kernel_size, stride, **kwargs)
-#         self.stride = [self.stride] * 2 if isinstance(self.stride, int) else self.stride
-#         self.kernel_size = [self.kernel_size] * 2 if isinstance(self.kernel_size, int) else self.kernel_size
-#         self.dilation = [self.dilation] * 2 if isinstance(self.dilation, int) else self.dilation
+    def __init__(self, kernel_size, stride, padding=0, dilation=1, return_indices=False, ceil_mode=False):
+        super().__init__(kernel_size, stride, padding, dilation, return_indices, ceil_mode)
+        self.stride = [self.stride] * 2 if isinstance(self.stride, int) else self.stride
+        self.kernel_size = [self.kernel_size] * 2 if isinstance(self.kernel_size, int) else self.kernel_size
+        self.dilation = [self.dilation] * 2 if isinstance(self.dilation, int) else self.dilation
 
-#         # Calculate padding based on image size and save it
-#         assert image_size is not None
-#         ih, iw = (image_size, image_size) if isinstance(image_size, int) else image_size
-#         kh, kw = self.kernel_size
-#         sh, sw = self.stride
-#         oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
-#         pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
-#         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
-#         if pad_h > 0 or pad_w > 0:
-#             self.static_padding = nn.Sequential(custom_nn_CircularPad2d(pad_w // 2, pad_w - pad_w // 2, 0, 0),
-#                                                 nn.ZeroPad2d((0, 0, pad_h // 2, pad_h - pad_h // 2)))
-#         else:
-#             self.static_padding = nn.Identity()
-
-#     def forward(self, x):
-#         x = self.static_padding(x)
-#         x = F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
-#                          self.dilation, self.ceil_mode, self.return_indices)
-#         return x
+    def forward(self, x):
+        ih, iw = x.size()[-2:]
+        kh, kw = self.kernel_size
+        sh, sw = self.stride
+        oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
+        pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
+        pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
+        if pad_h > 0 or pad_w > 0:
+            x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2])
+        return F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
+                            self.dilation, self.ceil_mode, self.return_indices)
 
 
+class MaxPool2dStaticSamePadding(nn.MaxPool2d):
+    """2D MaxPooling like TensorFlow's 'SAME' mode, with the given input image size.
+       The padding mudule is calculated in construction function, then used in forward.
+    """
+
+    def __init__(self, kernel_size, stride, image_size=None, **kwargs):
+        super().__init__(kernel_size, stride, **kwargs)
+        self.stride = [self.stride] * 2 if isinstance(self.stride, int) else self.stride
+        self.kernel_size = [self.kernel_size] * 2 if isinstance(self.kernel_size, int) else self.kernel_size
+        self.dilation = [self.dilation] * 2 if isinstance(self.dilation, int) else self.dilation
+
+        # Calculate padding based on image size and save it
+        assert image_size is not None
+        ih, iw = (image_size, image_size) if isinstance(image_size, int) else image_size
+        kh, kw = self.kernel_size
+        sh, sw = self.stride
+        oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
+        pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
+        pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
+        if pad_h > 0 or pad_w > 0:
+            self.static_padding = nn.ZeroPad2d((pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2))
+        else:
+            self.static_padding = nn.Identity()
+
+    def forward(self, x):
+        x = self.static_padding(x)
+        x = F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
+                         self.dilation, self.ceil_mode, self.return_indices)
+        return x
+
+class MaxPool2dDynamicCircularPadding(nn.MaxPool2d):
+    """2D MaxPooling like TensorFlow's 'SAME' mode, with a dynamic image size.
+       The padding is operated in forward function by calculating dynamically.
+    """
+
+    def __init__(self, kernel_size, stride, padding=0, dilation=1, return_indices=False, ceil_mode=False):
+        super().__init__(kernel_size, stride, padding, dilation, return_indices, ceil_mode)
+        self.stride = [self.stride] * 2 if isinstance(self.stride, int) else self.stride
+        self.kernel_size = [self.kernel_size] * 2 if isinstance(self.kernel_size, int) else self.kernel_size
+        self.dilation = [self.dilation] * 2 if isinstance(self.dilation, int) else self.dilation
+
+    def forward(self, x):
+        ih, iw = x.size()[-2:]
+        kh, kw = self.kernel_size
+        sh, sw = self.stride
+        oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
+        pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
+        pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
+        if pad_h > 0 or pad_w > 0:
+            x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, 0, 0], mode='circular') # horizontal circular padding
+            x = F.pad(x, [0, 0, pad_h // 2, pad_h - pad_h // 2]) # vertical constant padding with zeros
+        return F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
+                            self.dilation, self.ceil_mode, self.return_indices)
+
+
+class MaxPool2dStaticCircularPadding(nn.MaxPool2d):
+    """2D MaxPooling like TensorFlow's 'SAME' mode, with the given input image size.
+       The padding mudule is calculated in construction function, then used in forward.
+    """
+
+    def __init__(self, kernel_size, stride, image_size=None, **kwargs):
+        super().__init__(kernel_size, stride, **kwargs)
+        self.stride = [self.stride] * 2 if isinstance(self.stride, int) else self.stride
+        self.kernel_size = [self.kernel_size] * 2 if isinstance(self.kernel_size, int) else self.kernel_size
+        self.dilation = [self.dilation] * 2 if isinstance(self.dilation, int) else self.dilation
+
+        # Calculate padding based on image size and save it
+        assert image_size is not None
+        ih, iw = (image_size, image_size) if isinstance(image_size, int) else image_size
+        kh, kw = self.kernel_size
+        sh, sw = self.stride
+        oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
+        pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
+        pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
+        if pad_h > 0 or pad_w > 0:
+            self.static_padding = nn.Sequential(custom_nn_CircularPad2d(pad_w // 2, pad_w - pad_w // 2, 0, 0),
+                                                nn.ZeroPad2d((0, 0, pad_h // 2, pad_h - pad_h // 2)))
+        else:
+            self.static_padding = nn.Identity()
+
+    def forward(self, x):
+        x = self.static_padding(x)
+        x = F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
+                         self.dilation, self.ceil_mode, self.return_indices)
+        return x
+    
+    
 ################################################################################
 # Helper functions for loading model params
 ################################################################################
@@ -789,7 +722,6 @@ url_map_advprop = {
     'efficientnet-b7': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b7-4652b6dd.pth',
     'efficientnet-b8': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b8-22a8fe65.pth',
 }
-
 
 # TODO: add the petrained weights url map of 'efficientnet-l2'
 

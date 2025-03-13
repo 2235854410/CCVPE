@@ -40,9 +40,9 @@ class normalization(nn.Module):
 
 def double_conv(in_channels, out_channels):
     return nn.Sequential(
-        nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1),
+        nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, padding_mode='reflect'),
         nn.ReLU(inplace=True),
-        nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, padding_mode='reflect')
     )
 
 class CVM_VIGOR(nn.Module):
@@ -121,9 +121,9 @@ class CVM_VIGOR(nn.Module):
         self.conv2 = double_conv(56, 40)
         
         self.deconv1 = nn.ConvTranspose2d(41, 16, 2, 2)
-        self.conv1 = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1),
+        self.conv1 = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1, padding_mode='reflect'),
                                    nn.ReLU(inplace=True),
-                                   nn.Conv2d(16, 1, 3, stride=1, padding=1))
+                                   nn.Conv2d(16, 1, 3, stride=1, padding=1, padding_mode='reflect'))
         
         # ori
         self.deconv6_ori = nn.ConvTranspose2d(1300, 1024, 2, 2)
@@ -142,9 +142,9 @@ class CVM_VIGOR(nn.Module):
         self.conv2_ori = double_conv(48, 32)
         
         self.deconv1_ori = nn.ConvTranspose2d(32, 16, 2, 2)
-        self.conv1_ori = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1),
+        self.conv1_ori = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1, padding_mode='reflect'),
                                    nn.ReLU(inplace=True),
-                                   nn.Conv2d(16, 2, 3, stride=1, padding=1))
+                                   nn.Conv2d(16, 2, 3, stride=1, padding=1, padding_mode='reflect'))
         
     def forward(self, grd, sat):
         grd_feature_volume = self.grd_efficientnet.extract_features(grd) # shape=[8, 1280, 10, 20] 1280 是64*20
@@ -346,7 +346,11 @@ class CVM_VIGOR(nn.Module):
         x_ori = nn.functional.normalize(x_ori, p=2, dim=1)#[8, 2, 512, 512] channel0=cosine, channel1=sine
         
         return logits_flattened, heatmap, x_ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6
-    
+
+
+
+
+
 
 class CVM_VIGOR_ori_prior(nn.Module):
     def __init__(self, device, ori_noise, circular_padding=True, mask=False):
@@ -426,9 +430,9 @@ class CVM_VIGOR_ori_prior(nn.Module):
         self.conv2 = double_conv(56, 40)
         
         self.deconv1 = nn.ConvTranspose2d(41, 16, 2, 2)
-        self.conv1 = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1),
+        self.conv1 = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1, padding_mode='reflect'),
                                    nn.ReLU(inplace=True),
-                                   nn.Conv2d(16, 1, 3, stride=1, padding=1))
+                                   nn.Conv2d(16, 1, 3, stride=1, padding=1, padding_mode='reflect'))
         
         # ori
         self.deconv6_ori = nn.ConvTranspose2d(1300, 1024, 2, 2)
@@ -447,9 +451,9 @@ class CVM_VIGOR_ori_prior(nn.Module):
         self.conv2_ori = double_conv(48, 32)
         
         self.deconv1_ori = nn.ConvTranspose2d(32, 16, 2, 2)
-        self.conv1_ori = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1),
+        self.conv1_ori = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1, padding_mode='reflect'),
                                    nn.ReLU(inplace=True),
-                                   nn.Conv2d(16, 2, 3, stride=1, padding=1))
+                                   nn.Conv2d(16, 2, 3, stride=1, padding=1, padding_mode='reflect'))
         
     def forward(self, grd, sat):
         fov = random.uniform(0.5, 0.66)

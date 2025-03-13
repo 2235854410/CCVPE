@@ -33,9 +33,9 @@ class VIGORDataset(Dataset):
             self.city_list = ['NewYork', 'Seattle', 'SanFrancisco', 'Chicago']
         elif self.split == 'crossarea':
             if self.train:
-                self.city_list = ['NewYork', 'Seattle']
-            else:
                 self.city_list = ['SanFrancisco', 'Chicago']
+            else:
+                self.city_list = ['NewYork', 'Seattle']
         
         # load sat list
         self.sat_list = []

@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 # os.environ["MKL_NUM_THREADS"] = "4" 
 # os.environ["NUMEXPR_NUM_THREADS"] = "4" 
 # os.environ["OMP_NUM_THREADS"] = "4" 
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "2"
 import argparse
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
@@ -39,7 +39,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--area', type=str, help='samearea or crossarea', default='crossarea')
-parser.add_argument('--name', type=str, help='h', default='cross-fov180-240-infer-t')
+parser.add_argument('--name', type=str, help='h', default='cross-adaptingall-inferinsource')
 parser.add_argument('--training', type=bool, default=False)
 parser.add_argument('--pos_only', choices=('True','False'), default='True')
 parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-4)
@@ -49,7 +49,7 @@ parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss
 parser.add_argument('-f', '--FoV', type=int, help='field of view', default=360)
 parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation', default=0)
 parser.add_argument('--wandb', type=bool, default=True)
-parser.add_argument('--model_path', type=str, help='h', default='/data/test/code/CCVPE/ckpt/same.pt')
+parser.add_argument('--model_path', type=str, help='h', default='/data/test/code/CCVPE/ckpt/eccv.pt')
 dataset_root='/data/dataset/VIGOR'
 
 args = vars(parser.parse_args())
@@ -425,7 +425,7 @@ if training:
 else:
     torch.cuda.empty_cache()
     CVM_model = CVM_with_ori_prior(device, ori_noise, circular_padding)
-    test_model_path = '/data/test/code/CCVPE/models/VIGOR/crossarea_HFoV360/6/teacher_cross-fov180-240_model.pt'
+    test_model_path = '/data/test/code/CCVPE/models/VIGOR/crossarea_HFoV360/2/teacher_cross-fov180-240-adaptingall_model.pt'
     print('load model from: ' + test_model_path)
 
     CVM_model.load_state_dict(torch.load(test_model_path))
