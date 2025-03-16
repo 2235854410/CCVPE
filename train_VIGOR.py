@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 # os.environ["MKL_NUM_THREADS"] = "4" 
 # os.environ["NUMEXPR_NUM_THREADS"] = "4" 
 # os.environ["OMP_NUM_THREADS"] = "4" 
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "2"
 import argparse
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
@@ -38,8 +38,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # student_device = "cuda:1"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--area', type=str, help='samearea or crossarea', default='crossarea')
-parser.add_argument('--name', type=str, help='h', default='cross-fov180-240-infer-t')
+parser.add_argument('--area', type=str, help='samearea or crossarea', default='samearea')
+parser.add_argument('--name', type=str, help='h', default='same-fov180-240-3dof-infer')
 parser.add_argument('--training', type=bool, default=False)
 parser.add_argument('--pos_only', choices=('True','False'), default='True')
 parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-4)
@@ -124,11 +124,11 @@ else:
 
 if training:
     torch.cuda.empty_cache()
-    CVM_model_student = CVM_with_ori_prior(device, ori_noise, True, mask=True)
+    CVM_model_student = CVM(device, ori_noise, mask=True)
     CVM_model_student.load_state_dict(torch.load(model_path))
     CVM_model_student.to(device)
 
-    CVM_model_teacher = CVM_with_ori_prior(device, ori_noise, True, mask=False)
+    CVM_model_teacher = CVM(device, ori_noise, mask=False)
     print('load model from: ' + model_path)
 
     CVM_model_teacher.load_state_dict(torch.load(model_path))
@@ -435,7 +435,7 @@ if training:
 else:
     torch.cuda.empty_cache()
     CVM_model = CVM_with_ori_prior(device, ori_noise, circular_padding)
-    test_model_path = '/data/test/code/CCVPE/models/VIGOR/crossarea_HFoV360/5/teacher_crossarea-fov180-240_model.pt'
+    test_model_path = '/data/test/code/CCVPE/models/VIGOR/samearea_HFoV360/4/teacher_same-fov180-240-3dof_model.pt'
     print('load model from: ' + test_model_path)
 
     CVM_model.load_state_dict(torch.load(test_model_path))
