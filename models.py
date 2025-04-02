@@ -792,9 +792,9 @@ class CVM_KITTI(nn.Module):
         self.conv2 = double_conv(48, 32)
         
         self.deconv1 = nn.ConvTranspose2d(32+1, 16, 2, 2)
-        self.conv1 = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1),
+        self.conv1 = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1, padding_mode='reflect'),
                                    nn.ReLU(inplace=True),
-                                   nn.Conv2d(16, 1, 3, stride=1, padding=1))
+                                   nn.Conv2d(16, 1, 3, stride=1, padding=1, padding_mode='reflect'))
         
         # ori
         self.deconv6_ori = nn.ConvTranspose2d(2048+16, 1024, 2, 2)
@@ -813,9 +813,9 @@ class CVM_KITTI(nn.Module):
         self.conv2_ori = double_conv(48, 32)
         
         self.deconv1_ori = nn.ConvTranspose2d(32, 16, 2, 2)
-        self.conv1_ori = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1),
+        self.conv1_ori = nn.Sequential(nn.Conv2d(16, 16, 3, stride=1, padding=1, padding_mode='reflect'),
                                    nn.ReLU(inplace=True),
-                                   nn.Conv2d(16, 2, 3, stride=1, padding=1))
+                                   nn.Conv2d(16, 2, 3, stride=1, padding=1, padding_mode='reflect'))
         
         
     def forward(self, grd, sat):
