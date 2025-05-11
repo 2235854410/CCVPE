@@ -4,10 +4,7 @@ import time
 import wandb
 
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-os.environ['CUDA_VISIBLE_DEVICES'] = "2"
-# os.environ["MKL_NUM_THREADS"] = "4"
-# os.environ["NUMEXPR_NUM_THREADS"] = "4"
-# os.environ["OMP_NUM_THREADS"] = "4"
+os.environ['CUDA_VISIBLE_DEVICES'] = "3"
 
 import argparse
 from torch.utils.data import DataLoader, Subset
@@ -17,8 +14,13 @@ import torch.nn as nn
 import numpy as np
 import math
 from datasets import SatGrdDataset, SatGrdDatasetTest
-from losses import infoNCELoss, cross_entropy_loss, orientation_loss
-from models import CVM_KITTI as CVM
+from losses import infoNCELoss, cross_entropy_loss, orientation_loss, cross_entropy
+from distill_model import CVM_KITTI as CVM
+
+def update_teacher_model(student_model, teacher_model, ema_decay=0.9):
+    for student_param, teacher_param in zip(student_model.parameters(), teacher_model.parameters()):
+        teacher_param.data.mul_(ema_decay).add_((1 - ema_decay) * student_param.data)
+
 
 torch.manual_seed(17)
 np.random.seed(0)
@@ -26,18 +28,19 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 "The device is: {}".format(device)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--training', choices=('True', 'False'), default='False')
-parser.add_argument('--name', type=str, help='h', default='eccv-kitti-test')
+parser.add_argument('--training', choices=('True', 'True'), default='True')
+parser.add_argument('--name', type=str, help='h', default='test-kitti-bestcross')
 parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-4)
 parser.add_argument('-b', '--batch_size', type=int, help='batch size', default=8)
+parser.add_argument('-epoch', '--epoch', type=int, help='epoch', default=20)
 parser.add_argument('--weight_ori', type=float, help='weight on orientation loss', default=1e1)
 parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss', default=1e4)
 parser.add_argument('--shift_range_lat', type=float, help='range for random shift in lateral direction', default=20)
 parser.add_argument('--shift_range_lon', type=float, help='range for random shift in longitudinal direction',
                     default=20)
 parser.add_argument('--rotation_range', type=float, help='range for random orientation', default=0)
-parser.add_argument('--wandb', type=bool, default=False)
-parser.add_argument('--model_path', type=str, help='h', default='/data/test/code/CCVPE/ckpt/same.pt')
+parser.add_argument('--wandb', type=bool, default=True)
+parser.add_argument('--model_path', type=str, help='h', default='/data/test/code/CCVPE/models/KITTI/KITTI_rotation_range0/3/eccv-kitti-test_model.pt')
 
 args = vars(parser.parse_args())
 learning_rate = args['learning_rate']
@@ -51,6 +54,7 @@ rotation_range = args['rotation_range']
 record = args['wandb']
 name = args['name']
 model_path = args['model_path']
+train_epoch = args['epoch']
 
 label = 'KITTI_rotation_range' + str(rotation_range)
 
@@ -114,21 +118,34 @@ test2_loader = DataLoader(test2_set, batch_size=batch_size, shuffle=False, pin_m
                           num_workers=num_thread_workers, drop_last=False)
 
 torch.cuda.empty_cache()
-CVM_model = CVM(device)
+
+
 if training:
-    CVM_model.to(device)
-    for param in CVM_model.parameters():
+    CVM_model_student = CVM(device, mask=True)
+    CVM_model_student.load_state_dict(torch.load(model_path))
+    CVM_model_student.to(device)
+
+    CVM_model_teacher = CVM(device, mask=False)
+    CVM_model_teacher.load_state_dict(torch.load(model_path))
+    CVM_model_teacher.to(device)
+    CVM_model_teacher.eval()
+    print('load model from: ' + model_path)
+
+    for param in CVM_model_student.parameters():
         param.requires_grad = True
 
-    params = [p for p in CVM_model.parameters() if p.requires_grad]
+    for param in CVM_model_teacher.parameters():
+        param.requires_grad = False
+
+    params = [p for p in CVM_model_student.parameters() if p.requires_grad]
     optimizer = torch.optim.Adam(params, lr=learning_rate, betas=(0.9, 0.999))
 
     global_step = 0
     # with torch.autograd.set_detect_anomaly(True):
 
-    for epoch in range(6):  # loop over the dataset multiple times
+    for epoch in range(train_epoch):  # loop over the dataset multiple times
         running_loss = 0.0
-        CVM_model.train()
+        CVM_model_student.train()
         for i, data in enumerate(train_loader, 0):
             sat, grd, gt, gt_with_ori, gt_orientation, orientation_angle = [item.to(device) for item in data]
 
@@ -146,26 +163,37 @@ if training:
 
             # forward + backward + optimize
 
-            logits_flattened, heatmap, ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6 = CVM_model(
-                grd, sat)
+            # logits_flattened, heatmap, ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6 = CVM_model(
+            #     grd, sat)
 
-            loss_ori = torch.sum(torch.sum(torch.square(gt_orientation - ori), dim=1, keepdim=True) * gt) / \
-                       logits_flattened.size()[0]
-            loss_infoNCE = infoNCELoss(torch.flatten(matching_score_stacked, start_dim=1),
-                                       torch.flatten(gt_bottleneck, start_dim=1))
-            loss_infoNCE2 = infoNCELoss(torch.flatten(matching_score_stacked2, start_dim=1),
-                                        torch.flatten(gt_bottleneck2, start_dim=1))
-            loss_infoNCE3 = infoNCELoss(torch.flatten(matching_score_stacked3, start_dim=1),
-                                        torch.flatten(gt_bottleneck3, start_dim=1))
-            loss_infoNCE4 = infoNCELoss(torch.flatten(matching_score_stacked4, start_dim=1),
-                                        torch.flatten(gt_bottleneck4, start_dim=1))
-            loss_infoNCE5 = infoNCELoss(torch.flatten(matching_score_stacked5, start_dim=1),
-                                        torch.flatten(gt_bottleneck5, start_dim=1))
-            loss_infoNCE6 = infoNCELoss(torch.flatten(matching_score_stacked6, start_dim=1),
-                                        torch.flatten(gt_bottleneck6, start_dim=1))
-            loss_ce = cross_entropy_loss(logits_flattened, gt_flattened)
-            loss = loss_ce + weight_infoNCE * (
-                        loss_infoNCE + loss_infoNCE2 + loss_infoNCE3 + loss_infoNCE4 + loss_infoNCE5 + loss_infoNCE6) / 6 + weight_ori * loss_ori
+            # loss_ori = torch.sum(torch.sum(torch.square(gt_orientation - ori), dim=1, keepdim=True) * gt) / \
+            #            logits_flattened.size()[0]
+            # loss_infoNCE = infoNCELoss(torch.flatten(matching_score_stacked, start_dim=1),
+            #                            torch.flatten(gt_bottleneck, start_dim=1))
+            # loss_infoNCE2 = infoNCELoss(torch.flatten(matching_score_stacked2, start_dim=1),
+            #                             torch.flatten(gt_bottleneck2, start_dim=1))
+            # loss_infoNCE3 = infoNCELoss(torch.flatten(matching_score_stacked3, start_dim=1),
+            #                             torch.flatten(gt_bottleneck3, start_dim=1))
+            # loss_infoNCE4 = infoNCELoss(torch.flatten(matching_score_stacked4, start_dim=1),
+            #                             torch.flatten(gt_bottleneck4, start_dim=1))
+            # loss_infoNCE5 = infoNCELoss(torch.flatten(matching_score_stacked5, start_dim=1),
+            #                             torch.flatten(gt_bottleneck5, start_dim=1))
+            # loss_infoNCE6 = infoNCELoss(torch.flatten(matching_score_stacked6, start_dim=1),
+            #                             torch.flatten(gt_bottleneck6, start_dim=1))
+            # loss_ce = cross_entropy_loss(logits_flattened, gt_flattened)
+            # loss = loss_ce + weight_infoNCE * (
+            #             loss_infoNCE + loss_infoNCE2 + loss_infoNCE3 + loss_infoNCE4 + loss_infoNCE5 + loss_infoNCE6) / 6 + weight_ori * loss_ori
+
+            (logits_flattened_s, heatmap_s, ori_s, matching_score_stacked_s, matching_score_stacked2_s, matching_score_stacked3_s,
+             matching_score_stacked4_s, matching_score_stacked5_s, matching_score_stacked6_s) = CVM_model_student(grd, sat)
+
+            with torch.no_grad():
+                (logits_flattened_t, heatmap_t, ori_t, matching_score_stacked_t, matching_score_stacked2_t, matching_score_stacked3_t,
+                 matching_score_stacked4_t, matching_score_stacked5_t, matching_score_stacked6_t) = CVM_model_teacher(grd, sat)
+
+            loss_ce = cross_entropy(logits_flattened_s, logits_flattened_t)
+
+            loss = loss_ce
 
             loss.backward()
             optimizer.step()
@@ -184,17 +212,22 @@ if training:
         model_dir = 'models/KITTI/' + label + '/' + str(epoch) + '/'
         if not os.path.exists(model_dir):
             os.makedirs(model_dir)
-        torch.save(CVM_model.cpu().state_dict(), model_dir + f'{name}_model.pt')  # saving model
-        CVM_model.cuda()  # moving model to GPU for further training
-        CVM_model.eval()
+        torch.save(CVM_model_student.cpu().state_dict(), model_dir + f'studnet_{name}_model.pt')  # saving model
+        CVM_model_student.cuda()  # moving model to GPU for further training
+        CVM_model_student.eval()
 
+        update_teacher_model(CVM_model_student, CVM_model_teacher)
+        torch.save(CVM_model_teacher.cpu().state_dict(), model_dir + f'teacher_{name}_model.pt')  # saving model
+        CVM_model_teacher.cuda()
+
+        # eval student
         distance_in_meters = []
         orientation_error = []
         torch.cuda.empty_cache()
         with torch.no_grad():
             for i, data in enumerate(test1_loader, 0):
                 sat, grd, gt, gt_with_ori, gt_orientation, orientation_angle = [item.to(device) for item in data]
-                logits_flattened, heatmap, ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6 = CVM_model(
+                logits_flattened, heatmap, ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6 = CVM_model_student(
                     grd, sat)
                 gt = gt.cpu().detach().numpy()
                 gt_orientation = gt_orientation.cpu().detach().numpy()
@@ -223,7 +256,7 @@ if training:
                             angle_gt = math.degrees(a_acos_gt)
                         orientation_error.append(
                             np.min([np.abs(angle_gt - angle_pred), 360 - np.abs(angle_gt - angle_pred)]))
-
+        print("==========student result==========")
         mean_distance_error = np.mean(distance_in_meters)
         print('epoch: ', epoch, 'mean distance error (m) on test1 set: ', mean_distance_error)
         # file = 'results/'+label+'_test1_mean_distance_error.txt'
@@ -249,10 +282,10 @@ if training:
         #     np.savetxt(f, [median_orientation_error], fmt='%2f', header='test1_set_median_orientation_error:', comments=str(epoch)+'_')
 
         if record:
-            wandb.log({"test1 mean loc": mean_distance_error,
-                       "test1 median loc": median_distance_error,
-                       "test1 mean ori:": mean_orientation_error,
-                       "test1 median ori:": median_orientation_error}
+            wandb.log({"student test1 mean loc": mean_distance_error,
+                       "student test1 median loc": median_distance_error,
+                       "student test1 mean ori:": mean_orientation_error,
+                       "student test1 median ori:": median_orientation_error}
                       )
 
         distance_in_meters = []
@@ -261,7 +294,7 @@ if training:
         with torch.no_grad():
             for i, data in enumerate(test2_loader, 0):
                 sat, grd, gt, gt_with_ori, gt_orientation, orientation_angle = [item.to(device) for item in data]
-                logits_flattened, heatmap, ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6 = CVM_model(
+                logits_flattened, heatmap, ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6 = CVM_model_student(
                     grd, sat)
                 gt = gt.cpu().detach().numpy()
                 gt_orientation = gt_orientation.cpu().detach().numpy()
@@ -316,16 +349,152 @@ if training:
         #     np.savetxt(f, [median_orientation_error], fmt='%2f', header='test2_set_median_orientation_error:', comments=str(epoch)+'_')
 
         if record:
-            wandb.log({"test2 mean loc": mean_distance_error,
-                       "test2 median loc": median_distance_error,
-                       "test2 mean ori:": mean_orientation_error,
-                       "test2 median ori:": median_orientation_error}
+            wandb.log({"student test2 mean loc": mean_distance_error,
+                       "student test2 median loc": median_distance_error,
+                       "student test2 mean ori:": mean_orientation_error,
+                       "student test2 median ori:": median_orientation_error}
+                      )
+
+        # eval teacher
+        distance_in_meters = []
+        orientation_error = []
+        torch.cuda.empty_cache()
+        with torch.no_grad():
+            for i, data in enumerate(test1_loader, 0):
+                sat, grd, gt, gt_with_ori, gt_orientation, orientation_angle = [item.to(device) for item in data]
+                logits_flattened, heatmap, ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6 = CVM_model_teacher(
+                    grd, sat)
+                gt = gt.cpu().detach().numpy()
+                gt_orientation = gt_orientation.cpu().detach().numpy()
+                heatmap = heatmap.cpu().detach().numpy()
+                ori = ori.cpu().detach().numpy()
+                for batch_idx in range(gt.shape[0]):
+                    current_gt = gt[batch_idx, :, :, :]
+                    loc_gt = np.unravel_index(current_gt.argmax(), current_gt.shape)
+                    current_pred = heatmap[batch_idx, :, :, :]
+                    loc_pred = np.unravel_index(current_pred.argmax(), current_pred.shape)
+                    distance_in_meters.append(np.sqrt(
+                        (loc_gt[1] - loc_pred[1]) ** 2 + (loc_gt[2] - loc_pred[2]) ** 2) * test1_set.meter_per_pixel)
+
+                    cos_pred, sin_pred = ori[batch_idx, :, loc_pred[1], loc_pred[2]]
+                    if np.abs(cos_pred) <= 1 and np.abs(sin_pred) <= 1:
+                        a_acos_pred = math.acos(cos_pred)
+                        if sin_pred < 0:
+                            angle_pred = math.degrees(-a_acos_pred) % 360
+                        else:
+                            angle_pred = math.degrees(a_acos_pred)
+                        cos_gt, sin_gt = gt_orientation[batch_idx, :, loc_gt[1], loc_gt[2]]
+                        a_acos_gt = math.acos(cos_gt)
+                        if sin_gt < 0:
+                            angle_gt = math.degrees(-a_acos_gt) % 360
+                        else:
+                            angle_gt = math.degrees(a_acos_gt)
+                        orientation_error.append(
+                            np.min([np.abs(angle_gt - angle_pred), 360 - np.abs(angle_gt - angle_pred)]))
+        print("==========teacher result==========")
+        mean_distance_error = np.mean(distance_in_meters)
+        print('epoch: ', epoch, 'mean distance error (m) on test1 set: ', mean_distance_error)
+        # file = 'results/'+label+'_test1_mean_distance_error.txt'
+        # with open(file,'ab') as f:
+        #     np.savetxt(f, [mean_distance_error], fmt='%4f', header='test1_set_mean_distance_error_in_pixels:', comments=str(epoch)+'_')
+
+        median_distance_error = np.median(distance_in_meters)
+        print('epoch: ', epoch, 'median distance error (m) on test1 set: ', median_distance_error)
+        # file = 'results/'+label+'_test1_median_distance_error.txt'
+        # with open(file,'ab') as f:
+        #     np.savetxt(f, [median_distance_error], fmt='%4f', header='test1_set_median_distance_error_in_pixels:', comments=str(epoch)+'_')
+
+        mean_orientation_error = np.mean(orientation_error)
+        print('epoch: ', epoch, 'mean orientation error (degrees) on test1 set: ', mean_orientation_error)
+        # file = 'results/'+label+'_test1_mean_orientation_error.txt'
+        # with open(file,'ab') as f:
+        #     np.savetxt(f, [mean_orientation_error], fmt='%2f', header='test1_set_mean_orientation_error:', comments=str(epoch)+'_')
+
+        median_orientation_error = np.median(orientation_error)
+        print('epoch: ', epoch, 'median orientation error (degrees) on test1 set: ', median_orientation_error)
+        # file = 'results/'+label+'_test1_median_orientation_error.txt'
+        # with open(file,'ab') as f:
+        #     np.savetxt(f, [median_orientation_error], fmt='%2f', header='test1_set_median_orientation_error:', comments=str(epoch)+'_')
+
+        if record:
+            wandb.log({"teacher test1 mean loc": mean_distance_error,
+                       "teacher test1 median loc": median_distance_error,
+                       "teacher test1 mean ori:": mean_orientation_error,
+                       "teacher test1 median ori:": median_orientation_error}
+                      )
+
+        distance_in_meters = []
+        orientation_error = []
+        torch.cuda.empty_cache()
+        with torch.no_grad():
+            for i, data in enumerate(test2_loader, 0):
+                sat, grd, gt, gt_with_ori, gt_orientation, orientation_angle = [item.to(device) for item in data]
+                logits_flattened, heatmap, ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6 = CVM_model_teacher(
+                    grd, sat)
+                gt = gt.cpu().detach().numpy()
+                gt_orientation = gt_orientation.cpu().detach().numpy()
+                heatmap = heatmap.cpu().detach().numpy()
+                ori = ori.cpu().detach().numpy()
+                for batch_idx in range(gt.shape[0]):
+                    current_gt = gt[batch_idx, :, :, :]
+                    loc_gt = np.unravel_index(current_gt.argmax(), current_gt.shape)
+                    current_pred = heatmap[batch_idx, :, :, :]
+                    loc_pred = np.unravel_index(current_pred.argmax(), current_pred.shape)
+                    distance_in_meters.append(np.sqrt(
+                        (loc_gt[1] - loc_pred[1]) ** 2 + (loc_gt[2] - loc_pred[2]) ** 2) * test2_set.meter_per_pixel)
+
+                    cos_pred, sin_pred = ori[batch_idx, :, loc_pred[1], loc_pred[2]]
+                    if np.abs(cos_pred) <= 1 and np.abs(sin_pred) <= 1:
+                        a_acos_pred = math.acos(cos_pred)
+                        if sin_pred < 0:
+                            angle_pred = math.degrees(-a_acos_pred) % 360
+                        else:
+                            angle_pred = math.degrees(a_acos_pred)
+                        cos_gt, sin_gt = gt_orientation[batch_idx, :, loc_gt[1], loc_gt[2]]
+                        a_acos_gt = math.acos(cos_gt)
+                        if sin_gt < 0:
+                            angle_gt = math.degrees(-a_acos_gt) % 360
+                        else:
+                            angle_gt = math.degrees(a_acos_gt)
+                        orientation_error.append(
+                            np.min([np.abs(angle_gt - angle_pred), 360 - np.abs(angle_gt - angle_pred)]))
+
+        mean_distance_error = np.mean(distance_in_meters)
+        print('epoch: ', epoch, 'mean distance error (m) on test2 set: ', mean_distance_error)
+        # file = 'results/'+label+'_test2_mean_distance_error.txt'
+        # with open(file,'ab') as f:
+        #     np.savetxt(f, [mean_distance_error], fmt='%4f', header='test2_set_mean_distance_error_in_pixels:', comments=str(epoch)+'_')
+
+        median_distance_error = np.median(distance_in_meters)
+        print('epoch: ', epoch, 'median distance error (m) on test2 set: ', median_distance_error)
+        # file = 'results/'+label+'_test2_median_distance_error.txt'
+        # with open(file,'ab') as f:
+        #     np.savetxt(f, [median_distance_error], fmt='%4f', header='test2_set_median_distance_error_in_pixels:', comments=str(epoch)+'_')
+
+        mean_orientation_error = np.mean(orientation_error)
+        print('epoch: ', epoch, 'mean orientation error (degrees) on test2 set: ', mean_orientation_error)
+        # file = 'results/'+label+'_test2_mean_orientation_error.txt'
+        # with open(file,'ab') as f:
+        #     np.savetxt(f, [mean_orientation_error], fmt='%2f', header='test2_set_mean_orientation_error:', comments=str(epoch)+'_')
+
+        median_orientation_error = np.median(orientation_error)
+        print('epoch: ', epoch, 'median orientation error (degrees) on test2 set: ', median_orientation_error)
+        # file = 'results/'+label+'_test2_median_orientation_error.txt'
+        # with open(file,'ab') as f:
+        #     np.savetxt(f, [median_orientation_error], fmt='%2f', header='test2_set_median_orientation_error:', comments=str(epoch)+'_')
+
+        if record:
+            wandb.log({"teacher test2 mean loc": mean_distance_error,
+                       "teacher test2 median loc": median_distance_error,
+                       "teacher test2 mean ori:": mean_orientation_error,
+                       "teacher test2 median ori:": median_orientation_error}
                       )
 
     print('Finished Training')
 
 else:
-    test_model_path = '/data/test/code/CCVPE/models/KITTI/KITTI_rotation_range0/1/eccv-kitti-test_model.pt'
+    CVM_model = CVM(device)
+    test_model_path = '/data/test/code/CCVPE/models/KITTI/KITTI_rotation_range0/4/eccv-kitti_model.pt'
 
     print('load model from: ' + test_model_path)
     CVM_model.load_state_dict(torch.load(test_model_path))
@@ -341,7 +510,6 @@ else:
     torch.cuda.empty_cache()
     with torch.no_grad():
         for i, data in enumerate(test1_loader, 0):
-            # print(i)
             sat, grd, gt, gt_with_ori, gt_orientation, orientation_angle = data
             grd = grd.to(device)
             sat = sat.to(device)
@@ -388,8 +556,7 @@ else:
                         angle_gt = math.degrees(-a_acos_gt) % 360
                     else:
                         angle_gt = math.degrees(a_acos_gt)
-                    orientation_error.append(
-                        np.min([np.abs(angle_gt - angle_pred), 360 - np.abs(angle_gt - angle_pred)]))
+                    orientation_error.append(np.min([np.abs(angle_gt - angle_pred), 360 - np.abs(angle_gt - angle_pred)]))
 
     print('---------------------------------------')
     print('Test 1 set')
@@ -404,6 +571,10 @@ else:
     longitudinal_error_in_meters = np.array(longitudinal_error_in_meters)
     lateral_error_in_meters = np.array(lateral_error_in_meters)
     orientation_error = np.array(orientation_error)
+    print(f"mean long error (m): {np.mean(longitudinal_error_in_meters)}")
+    print(f"mean lateral error (m): {np.mean(lateral_error_in_meters)}")
+
+    print('---------------------------------------')
     print('percentage of samples with lateral localization error under 1m, 3m, and 5m: ',
           np.sum(lateral_error_in_meters < 1) / len(lateral_error_in_meters),
           np.sum(lateral_error_in_meters < 3) / len(lateral_error_in_meters),
@@ -426,7 +597,6 @@ else:
     torch.cuda.empty_cache()
     with torch.no_grad():
         for i, data in enumerate(test2_loader, 0):
-            # print(i)
             sat, grd, gt, gt_with_ori, gt_orientation, orientation_angle = data
             grd = grd.to(device)
             sat = sat.to(device)
@@ -473,8 +643,7 @@ else:
                         angle_gt = math.degrees(-a_acos_gt) % 360
                     else:
                         angle_gt = math.degrees(a_acos_gt)
-                    orientation_error.append(
-                        np.min([np.abs(angle_gt - angle_pred), 360 - np.abs(angle_gt - angle_pred)]))
+                    orientation_error.append(np.min([np.abs(angle_gt - angle_pred), 360 - np.abs(angle_gt - angle_pred)]))
 
     print('---------------------------------------')
     print('Test 2 set')
@@ -484,10 +653,17 @@ else:
     print('---------------------------------------')
     print('mean orientation error (degrees): ', np.mean(orientation_error))
     print('median orientation error (degrees): ', np.median(orientation_error))
-
     print('---------------------------------------')
+
+
     longitudinal_error_in_meters = np.array(longitudinal_error_in_meters)
     lateral_error_in_meters = np.array(lateral_error_in_meters)
+
+    print('---------------------------------------')
+    print(f"mean long error (m): {np.mean(longitudinal_error_in_meters)}")
+    print(f"mean lateral error (m): {np.mean(lateral_error_in_meters)}")
+    print('---------------------------------------')
+
     orientation_error = np.array(orientation_error)
     print('percentage of samples with lateral localization error under 1m, 3m, and 5m: ',
           np.sum(lateral_error_in_meters < 1) / len(lateral_error_in_meters),
